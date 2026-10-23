@@ -2,7 +2,7 @@ name: Build YouTube AI Factory Android App
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "fix/remove-fake-features" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch: # Allows manual trigger from GitHub web / mobile interface
