@@ -64,10 +64,7 @@ fun AnalyticsScreen(
     val isConnected by viewModel.isYouTubeConnected.collectAsState()
     val channelName by viewModel.channelName.collectAsState()
 
-    // Aggregate metrics from published projects
-    val publishedProjects = projects.filter { it.isUploaded }
-    // Do not show fabricated channel statistics. The app currently has no YouTube Analytics API connection.
-    val totalViews = publishedProjects.sumOf { it.viewsCount }
+    // Do not show locally cached/sample values as live channel analytics.
     val subscribers = "--"
     val watchHours = "--"
     val avgRetention = "--"
@@ -151,11 +148,11 @@ fun AnalyticsScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard(
                     title = AppStrings.get("anal_metric_views", lang),
-                    value = if (totalViews > 0) String.format("%,d", totalViews) else "0",
+                    value = "--",
                     icon = Icons.Default.Visibility,
                     accentColor = NeonCyan,
                     modifier = Modifier.weight(1f),
-                    trendText = if (isConnected) "+24%" else null,
+                    trendText = null,
                     testTag = "metric_views"
                 )
                 StatCard(
@@ -164,7 +161,7 @@ fun AnalyticsScreen(
                     icon = Icons.Default.People,
                     accentColor = ElectricViolet,
                     modifier = Modifier.weight(1f),
-                    trendText = if (isConnected) "+180" else null,
+                    trendText = null,
                     testTag = "metric_subs"
                 )
             }
@@ -216,7 +213,7 @@ fun AnalyticsScreen(
                             .height(140.dp)
                     ) {
                         val days = listOf("Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri")
-                        val values = if (isConnected) listOf(35f, 52f, 48f, 75f, 92f, 110f, 125f) else listOf(5f, 5f, 5f, 5f, 5f, 5f, 5f)
+                        val values = listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f)
                         val maxVal = 130f
                         val w = size.width
                         val h = size.height
