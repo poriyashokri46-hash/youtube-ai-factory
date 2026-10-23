@@ -658,8 +658,24 @@ class VideoRenderer(private val context: Context) {
             muxer.release()
             muxer = null
 
-            if (!videoFile.delete()) throw IllegalStateException("Could not replace the original silent video.")
-            if (!tempFile.renameTo(videoFile)) throw IllegalStateException("Could not finalize the audio-mixed MP4.")
+            // Replace only after muxing is complete, keeping a rollback copy on rename failure.
+            val backupFile = File(videoFile.parentFile, videoFile.nameWithoutExtension + "_backup.mp4")
+            if (backupFile.exists() && !backupFile.delete()) {
+                throw IllegalStateException("Could not clear the previous video backup.")
+            }
+            if (!videoFile.renameTo(backupFile)) {
+                throw IllegalStateException("Could not preserve the original rendered video.")
+            }
+            if (!tempFile.renameTo(videoFile)) {
+                val restored = backupFile.renameTo(videoFile)
+                if (!restored) {
+                    Log.e("VideoRenderer", "Could not restore backup video at " + backupFile.absolutePath)
+                }
+                throw IllegalStateException("Could not finalize the audio-mixed MP4; original video restore " + (if (restored) "succeeded" else "failed") + ".")
+            }
+            if (backupFile.exists() && !backupFile.delete()) {
+                Log.w("VideoRenderer", "Mixed video saved but temporary backup remains: " + backupFile.absolutePath)
+            }
         } catch (e: Exception) {
             Log.e("VideoRenderer", "Audio muxing failed", e)
             throw IllegalStateException("Could not add selected audio to the MP4: ${e.message ?: "unsupported audio file"}", e)
