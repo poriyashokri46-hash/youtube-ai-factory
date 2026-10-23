@@ -126,21 +126,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var renderJob: Job? = null
     private var uploadJob: Job? = null
 
-    init {
-        seedDatabaseIfEmpty()
-    }
-
-    private fun seedDatabaseIfEmpty() {
-        viewModelScope.launch {
-            if (projectDao.getCount() == 0) {
-                projectDao.insertAll(SampleData.getInitialProjects())
-            }
-            if (automationDao.getCount() == 0) {
-                automationDao.insertAll(SampleData.getInitialTasks())
-            }
-        }
-    }
-
     fun navigateTo(screen: AppScreen) {
         if (_currentScreen.value != screen) {
             _navigationStack.add(_currentScreen.value)
@@ -255,7 +240,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
-            _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "سناریو و متادیتای ویدیو با موفقیت ساخته شد" else "AI Script & Metadata generated")
+            _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "قالب اولیه سناریو ساخته شد؛ تولید هوش مصنوعی هنوز به مدل واقعی متصل نیست" else "A starter script template was created; no real AI model is connected yet")
         }
     }
 
@@ -501,11 +486,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         navigateTo(AppScreen.PUBLISHING)
     }
 
-    fun connectYouTubeOAuth(channelTitle: String = "AI Factory Channel", handle: String = "@AIFactoryGlobal") {
-        preferencesManager.setYouTubeConnected(true, channelTitle, handle)
+    fun connectYouTubeOAuth(channelTitle: String = "AI Factory Studio", handle: String = "@AIFactoryOfficial") {
+        // Never mark a channel as connected without completing Google's real OAuth flow.
+        preferencesManager.setYouTubeConnected(false)
         viewModelScope.launch {
             _snackbarMessage.emit(
-                if (appLanguage.value == AppLanguage.PERSIAN) "کانال یوتیوب با موفقیت از طریق OAuth 2.0 متصل شد!" else "YouTube channel securely connected via OAuth 2.0!"
+                if (appLanguage.value == AppLanguage.PERSIAN)
+                    "اتصال واقعی یوتیوب هنوز پیکربندی نشده است؛ هیچ حسابی متصل نشد."
+                else
+                    "Real YouTube OAuth is not configured yet; no account was connected."
             )
         }
     }
@@ -520,42 +509,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startYouTubeUpload() {
-        val projectId = _selectedPublishProjectId.value ?: return
-        if (_isUploading.value) return
-
-        if (!isYouTubeConnected.value) {
-            viewModelScope.launch {
-                _snackbarMessage.emit(
-                    if (appLanguage.value == AppLanguage.PERSIAN) "ابتدا کانال یوتیوب خود را متصل کنید" else "Please connect your YouTube channel first"
-                )
-            }
-            return
-        }
-
-        _isUploading.value = true
+        // Upload is deliberately blocked until real OAuth + YouTube Data API upload are configured.
+        _isUploading.value = false
         _uploadProgress.value = 0
-
-        uploadJob?.cancel()
-        uploadJob = viewModelScope.launch {
-            for (p in 1..100) {
-                delay(35)
-                _uploadProgress.value = p
-            }
-
-            val project = projectDao.getProjectById(projectId)
-            if (project != null) {
-                val updated = project.copy(
-                    status = VideoStatus.PUBLISHED.name,
-                    isUploaded = true,
-                    youtubeVideoId = "yt_ai_" + System.currentTimeMillis().toString().takeLast(6),
-                    updatedAt = System.currentTimeMillis()
-                )
-                projectDao.updateProject(updated)
-            }
-
-            _isUploading.value = false
+        viewModelScope.launch {
             _snackbarMessage.emit(
-                if (appLanguage.value == AppLanguage.PERSIAN) "ویدیو با موفقیت در یوتیوب منتشر شد!" else "Video successfully published to YouTube!"
+                if (appLanguage.value == AppLanguage.PERSIAN)
+                    "هیچ ویدیویی آپلود نشد. انتشار واقعی به OAuth گوگل و YouTube Data API نیاز دارد که هنوز پیکربندی نشده‌اند."
+                else
+                    "Nothing was uploaded. Real publishing requires configured Google OAuth and the YouTube Data API."
             )
         }
     }
@@ -571,57 +533,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun runAutomationTaskNow() {
         viewModelScope.launch {
-            val isFa = appLanguage.value == AppLanguage.PERSIAN
-            val topicsFa = listOf(
-                "۵ ترفند هوش مصنوعی برای ویرایش سریع ویدیو",
-                "نحوه بهینه‌سازی تگ‌های یوتیوب برای رفتن به اکسپلور",
-                "راهنمای ساخت پادکست خودکار با هوش مصنوعی"
-            )
-            val topicsEn = listOf(
-                "5 AI Prompts for Viral Video Scripts",
-                "How to Rank #1 on YouTube Search",
-                "Automating YouTube Shorts With Zero Budget"
-            )
-
-            val chosenTopic = if (isFa) topicsFa.random() else topicsEn.random()
-            val taskTitle = if (isFa) "وظیفه فوری: $chosenTopic" else "Instant Task: $chosenTopic"
-            val log = if (isFa) "سناریو نگارش شد، صدا تولید گردید و برای بررسی آماده شد." else "Script generated, voiceover synthesized, ready for review."
-
-            val task = AutomationTask(
-                title = taskTitle,
-                format = "SHORTS",
-                language = if (isFa) "fa" else "en",
-                scheduledTimeStr = if (isFa) "همین حالا" else "Right now",
-                status = "COMPLETED",
-                logMessage = log
-            )
-            automationDao.insertTask(task)
-
-            // Also create a draft project
-            val project = VideoProject(
-                title = chosenTopic,
-                topic = chosenTopic,
-                language = if (isFa) "fa" else "en",
-                format = "SHORTS",
-                targetDurationSec = 50,
-                tone = "ENTERTAINING",
-                scriptHook = if (isFa) "این ترفند را حتماً در ویدیوی بعدی امتحان کنید!" else "You must try this hack in your next video!",
-                scriptIntro = if (isFa) "سلام همراهان عزیز کارخانه یوتیوب!" else "Welcome back creators!",
-                scriptBody = if (isFa) "سه گام عملیاتی برای بهبود رتبه و بازدید کانال شما." else "Three actionable steps to boost your channel reach.",
-                scriptCta = if (isFa) "سابسکرایب کنید و زنگوله را بزنید!" else "Subscribe and hit the bell icon!",
-                scriptOutro = if (isFa) "روز خوش و پر انرژی!" else "Keep creating!",
-                fullScript = if (isFa) "این ترفند را حتماً امتحان کنید! سلام همراهان عزیز کارخانه یوتیوب! سه گام عملیاتی برای بهبود رتبه. سابسکرایب کنید!" else "Try this hack! Welcome back creators! Three actionable steps. Subscribe!",
-                description = chosenTopic,
-                tags = "YouTube, AI, Shorts, Growth",
-                status = VideoStatus.REVIEW_PENDING.name,
-                renderProgress = 100,
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis()
-            )
-            projectDao.insertProject(project)
-
             _snackbarMessage.emit(
-                if (isFa) "وظیفه خودکار با موفقیت اجرا شد و ویدیوی جدید ایجاد گردید" else "Automation task executed and new project created"
+                if (appLanguage.value == AppLanguage.PERSIAN)
+                    "اجرای خودکار هنوز پیاده‌سازی نشده است؛ هیچ وظیفه یا ویدیویی به‌صورت ساختگی ایجاد نشد."
+                else
+                    "Background automation is not implemented yet; no fake task or video was created."
             )
         }
     }
