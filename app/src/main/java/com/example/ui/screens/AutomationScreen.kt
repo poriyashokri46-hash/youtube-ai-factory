@@ -110,9 +110,9 @@ fun AutomationScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = if (lang == AppLanguage.PERSIAN)
-                            "وضعیت موتور اتوماسیون: وظایف پس‌زمینه برای اجرا در محیط اندروید (WorkManager) سازماندهی شده‌اند. برای خودکارسازی کامل بدون نیاز به باز بودن اپلیکیشن در پس‌زمینه، مستندات استقرار ورکر ابری در بخش تنظیمات در دسترس است."
+                            "شفاف‌سازی: این نسخه هنوز WorkManager یا ورکر ابری را برای اجرای واقعی زمان‌بندی‌ها راه‌اندازی نکرده است. این تنظیم فقط ترجیح شما را ذخیره می‌کند؛ اجرای خودکار تا زمان پیاده‌سازی غیرفعال است."
                         else
-                            "Automation Engine Status: Background tasks are scheduled via Android WorkManager. For 24/7 cloud serverless automation when the device is asleep, review the cloud worker deployment guide in Settings.",
+                            "Disclosure: this build does not schedule real WorkManager jobs or run a cloud worker. This setting only stores your preference; automatic execution is not implemented yet.",
                         color = TextWhite,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
