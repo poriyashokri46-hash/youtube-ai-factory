@@ -221,21 +221,25 @@ fun AutomationScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Manual Execution Trigger
+                    // Do not present a non-functional manual trigger as an available action.
                     Button(
-                        onClick = { viewModel.runAutomationTaskNow() },
+                        onClick = {},
+                        enabled = false,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
                             .testTag("run_automation_now_btn"),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                        colors = ButtonDefaults.buttonColors(
+                            disabledContainerColor = Color(0xFF1E283E),
+                            disabledContentColor = TextMuted
+                        )
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF001F24), modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = TextMuted, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = AppStrings.get("auto_run_now", lang),
-                            color = Color(0xFF001F24),
+                            text = if (lang == AppLanguage.PERSIAN) "اجرای خودکار هنوز فعال نیست" else "Automation is not available yet",
+                            color = TextMuted,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
