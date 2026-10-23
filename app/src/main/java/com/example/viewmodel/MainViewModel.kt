@@ -271,7 +271,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
         val body = requestJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
         val request = Request.Builder()
-            .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + java.net.URLEncoder.encode(apiKey, "UTF-8"))
+            .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent")
+            .header("x-goog-api-key", apiKey)
             .post(body)
             .build()
         geminiHttpClient.newCall(request).execute().use { response ->
@@ -582,6 +583,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "Background automation is not implemented yet; no fake task or video was created."
             )
         }
+    }
+
+    override fun onCleared() {
+        geminiApiKey.value = ""
+        geminiHttpClient.dispatcher.cancelAll()
+        geminiHttpClient.connectionPool.evictAll()
+        super.onCleared()
     }
 
     // Reset Data
