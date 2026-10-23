@@ -1,0 +1,6 @@
+{
+  "name": "YouTube AI Factory",
+  "description": "کارخانه هوش مصنوعی یوتیوب - تولید، تدوین، سناریونویسی و انتشار خودکار محتوای یوتیوب با استودیو هوشمند و پیشرفته",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,71 @@
+name: Build YouTube AI Factory Android App
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Allows manual trigger from GitHub web / mobile interface
+
+jobs:
+  build:
+    name: Build APK and AAB
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Prepare build environment and keystore
+        run: |
+          # Ensure .env file exists for secrets plugin
+          if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+            cp .env.example .env
+          fi
+          
+          # Restore debug keystore if encoded file exists, or generate fresh one
+          if [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore || true
+          fi
+          
+          if [ ! -f "debug.keystore" ]; then
+            keytool -genkey -v -keystore debug.keystore \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Build Debug AAB (Android App Bundle)
+        run: ./gradlew bundleDebug --no-daemon
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouTube-AI-Factory-APK
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouTube-AI-Factory-AAB
+          path: app/build/outputs/bundle/debug/*.aab
+          retention-days: 30

@@ -1,0 +1,666 @@
+package com.example.video
+
+import android.content.ContentValues
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.Typeface
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaCodecList
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
+import android.media.MediaMuxer
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.util.Log
+import com.example.data.VideoProject
+import com.example.model.SubtitleStyle
+import com.example.model.VisualTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.nio.ByteBuffer
+import kotlin.math.sin
+
+data class RenderResult(
+    val file: File,
+    val uri: Uri,
+    val durationSeconds: Int,
+    val frameCount: Int,
+    val width: Int,
+    val height: Int
+)
+
+class VideoRenderer(private val context: Context) {
+
+    suspend fun renderVideo(
+        project: VideoProject,
+        imageUris: List<Uri>,
+        audioUri: Uri?,
+        onProgress: (percent: Int, message: String) -> Unit
+    ): RenderResult = withContext(Dispatchers.IO) {
+        val isShorts = project.format == "SHORTS"
+        val width = if (isShorts) 720 else 1280
+        val height = if (isShorts) 1280 else 720
+        val fps = 30
+
+        onProgress(5, "آماده‌سازی لایه‌های بصری و سناریو...")
+
+        // 1. Determine actual duration
+        val audioDurationSec = audioUri?.let { getAudioDurationSeconds(it) }
+        val targetDurationSec = audioDurationSec?.coerceIn(5, 60)
+            ?: (if (imageUris.isNotEmpty()) (imageUris.size * 4).coerceIn(6, 45) else 12)
+        val totalFrames = targetDurationSec * fps
+
+        // 2. Decode user images or prepare themed background slides
+        val loadedBitmaps = mutableListOf<Bitmap>()
+        for (uri in imageUris) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val original = BitmapFactory.decodeStream(stream)
+                    if (original != null) {
+                        val scaled = scaleCenterCrop(original, width, height)
+                        loadedBitmaps.add(scaled)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("VideoRenderer", "Failed to load image: $uri", e)
+            }
+        }
+
+        // 3. Subtitle lines breakdown
+        val scriptLines = parseScriptLines(project)
+
+        // 4. Output File
+        val moviesDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+            ?: context.filesDir
+        if (!moviesDir.exists()) moviesDir.mkdirs()
+        val outputFile = File(moviesDir, "yt_factory_${project.id}_${System.currentTimeMillis()}.mp4")
+
+        onProgress(10, "پیکربندی انکودر سخت‌افزاری MediaCodec...")
+
+        // 5. Setup MediaCodec & MediaMuxer
+        val colorFormat = getSupportedColorFormat()
+        val videoFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat)
+            setInteger(MediaFormat.KEY_BIT_RATE, 2_200_000)
+            setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+        }
+
+        val videoEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        videoEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        videoEncoder.start()
+
+        val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        var videoTrackIndex = -1
+        var muxerStarted = false
+
+        val frameBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(frameBitmap)
+        val pixelArray = IntArray(width * height)
+        val yuvBuffer = ByteArray(width * height * 3 / 2)
+
+        val bufferInfo = MediaCodec.BufferInfo()
+        val timeoutUs = 10_000L
+
+        try {
+            // Encode Frames
+            for (frameIndex in 0 until totalFrames) {
+                val currentSeconds = frameIndex / fps.toFloat()
+                val currentProgress = 10 + ((frameIndex.toFloat() / totalFrames) * 80).toInt()
+
+                if (frameIndex % 15 == 0) {
+                    onProgress(currentProgress, "در حال انکود فریم $frameIndex از $totalFrames با MediaCodec...")
+                }
+
+                // Render visual contents onto frameBitmap
+                drawFrame(
+                    canvas = canvas,
+                    width = width,
+                    height = height,
+                    frameIndex = frameIndex,
+                    currentSeconds = currentSeconds,
+                    totalSeconds = targetDurationSec.toFloat(),
+                    loadedBitmaps = loadedBitmaps,
+                    scriptLines = scriptLines,
+                    project = project
+                )
+
+                // Convert to YUV420SemiPlanar / NV12
+                frameBitmap.getPixels(pixelArray, 0, width, 0, 0, width, height)
+                rgbToYuv420sp(pixelArray, width, height, yuvBuffer, colorFormat)
+
+                // Feed to MediaCodec
+                var inputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
+                while (inputIndex < 0) {
+                    drainEncoder(videoEncoder, muxer, bufferInfo, timeoutUs) { track ->
+                        videoTrackIndex = track
+                        muxerStarted = true
+                    }
+                    inputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
+                }
+
+                val inputBuffer = videoEncoder.getInputBuffer(inputIndex)!!
+                inputBuffer.clear()
+                inputBuffer.put(yuvBuffer)
+                val presentationTimeUs = (frameIndex * 1_000_000L) / fps
+                videoEncoder.queueInputBuffer(inputIndex, 0, yuvBuffer.size, presentationTimeUs, 0)
+
+                // Drain output
+                drainEncoder(videoEncoder, muxer, bufferInfo, 0) { track ->
+                    videoTrackIndex = track
+                    muxerStarted = true
+                }
+            }
+
+            // Signal End of Stream
+            val eosInputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
+            if (eosInputIndex >= 0) {
+                val lastPtsUs = (totalFrames * 1_000_000L) / fps
+                videoEncoder.queueInputBuffer(eosInputIndex, 0, 0, lastPtsUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+            }
+
+            // Drain remaining
+            while (true) {
+                val status = drainEncoder(videoEncoder, muxer, bufferInfo, timeoutUs) { track ->
+                    videoTrackIndex = track
+                    muxerStarted = true
+                }
+                if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                    break
+                }
+                if (!status) break
+            }
+
+            onProgress(92, "در حال میکس صوت و نهایی‌سازی ساختار MP4...")
+
+            // Mux audio if available and compatible
+            if (audioUri != null && muxerStarted) {
+                tryMuxAudio(context, audioUri, muxer, targetDurationSec * 1_000_000L)
+            }
+
+        } finally {
+            try {
+                videoEncoder.stop()
+                videoEncoder.release()
+            } catch (e: Exception) {
+                Log.e("VideoRenderer", "Error stopping encoder", e)
+            }
+            try {
+                if (muxerStarted) {
+                    muxer.stop()
+                }
+                muxer.release()
+            } catch (e: Exception) {
+                Log.e("VideoRenderer", "Error stopping muxer", e)
+            }
+            frameBitmap.recycle()
+            for (b in loadedBitmaps) {
+                if (!b.isRecycled) b.recycle()
+            }
+        }
+
+        onProgress(97, "ثبت فایل نهایی در گالری دستگاه...")
+
+        // Export/Register in MediaStore for immediate user accessibility
+        val publicUri = registerInMediaStore(context, outputFile, project.title)
+
+        onProgress(100, "ویدیوی واقعی MP4 آماده شد!")
+
+        RenderResult(
+            file = outputFile,
+            uri = publicUri ?: Uri.fromFile(outputFile),
+            durationSeconds = targetDurationSec,
+            frameCount = totalFrames,
+            width = width,
+            height = height
+        )
+    }
+
+    private fun drainEncoder(
+        encoder: MediaCodec,
+        muxer: MediaMuxer,
+        bufferInfo: MediaCodec.BufferInfo,
+        timeoutUs: Long,
+        onMuxerStart: (videoTrackIndex: Int) -> Unit
+    ): Boolean {
+        var hadOutput = false
+        while (true) {
+            val outputIndex = encoder.dequeueOutputBuffer(bufferInfo, timeoutUs)
+            when {
+                outputIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> return hadOutput
+                outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                    val newFormat = encoder.outputFormat
+                    val trackIndex = muxer.addTrack(newFormat)
+                    muxer.start()
+                    onMuxerStart(trackIndex)
+                    hadOutput = true
+                }
+                outputIndex >= 0 -> {
+                    val encodedData = encoder.getOutputBuffer(outputIndex)
+                    if (encodedData != null && bufferInfo.size > 0) {
+                        encodedData.position(bufferInfo.offset)
+                        encodedData.limit(bufferInfo.offset + bufferInfo.size)
+                        muxer.writeSampleData(0, encodedData, bufferInfo)
+                    }
+                    encoder.releaseOutputBuffer(outputIndex, false)
+                    hadOutput = true
+                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                        return hadOutput
+                    }
+                }
+            }
+        }
+    }
+
+    private fun drawFrame(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        frameIndex: Int,
+        currentSeconds: Float,
+        totalSeconds: Float,
+        loadedBitmaps: List<Bitmap>,
+        scriptLines: List<String>,
+        project: VideoProject
+    ) {
+        val visualTheme = VisualTheme.fromString(project.visualTheme)
+        val subtitleStyle = SubtitleStyle.fromString(project.subtitleStyle)
+
+        // 1. Draw Background Image or Theme Graphic
+        if (loadedBitmaps.isNotEmpty()) {
+            val imageIndex = ((currentSeconds / totalSeconds) * loadedBitmaps.size).toInt().coerceIn(0, loadedBitmaps.size - 1)
+            val currentBitmap = loadedBitmaps[imageIndex]
+            canvas.drawBitmap(currentBitmap, 0f, 0f, null)
+
+            // Dim overlay for subtitle readability
+            val dimPaint = Paint().apply {
+                color = Color.argb(80, 0, 0, 0)
+            }
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), dimPaint)
+        } else {
+            // Render themed procedural graphics
+            drawProceduralTheme(canvas, width, height, visualTheme, frameIndex)
+        }
+
+        // 2. Draw Top Watermark / Badge
+        val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(180, 10, 15, 29)
+        }
+        val badgeRect = RectF(24f, 24f, (width - 24).toFloat(), 96f)
+        canvas.drawRoundRect(badgeRect, 18f, 18f, badgePaint)
+
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+            color = Color.parseColor("#00E5FF")
+        }
+        canvas.drawRoundRect(badgeRect, 18f, 18f, borderPaint)
+
+        val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 28f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val displayTitle = if (project.title.length > 38) project.title.take(38) + "..." else project.title
+        canvas.drawText(displayTitle, 40f, 66f, titlePaint)
+
+        // 3. Draw Subtitles at bottom third
+        if (scriptLines.isNotEmpty()) {
+            val subIndex = ((currentSeconds / totalSeconds) * scriptLines.size).toInt().coerceIn(0, scriptLines.size - 1)
+            val activeSubtitle = scriptLines[subIndex]
+
+            drawSubtitleBox(
+                canvas = canvas,
+                width = width,
+                height = height,
+                text = activeSubtitle,
+                style = subtitleStyle
+            )
+        }
+    }
+
+    private fun drawProceduralTheme(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        theme: VisualTheme,
+        frameIndex: Int
+    ) {
+        val bgPaint = Paint()
+        when (theme) {
+            VisualTheme.CYBERPUNK -> {
+                val shader = LinearGradient(
+                    0f, 0f, 0f, height.toFloat(),
+                    intArrayOf(Color.parseColor("#0A0E1A"), Color.parseColor("#150B28"), Color.parseColor("#00283A")),
+                    null,
+                    Shader.TileMode.CLAMP
+                )
+                bgPaint.shader = shader
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+
+                // Neon Wave Visualizer Lines
+                val wavePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#00E5FF")
+                    strokeWidth = 3f
+                    style = Paint.Style.STROKE
+                }
+                val waveY = height * 0.65f
+                for (x in 0 until width step 8) {
+                    val offset = (frameIndex * 0.15f) + (x * 0.03f)
+                    val h = (sin(offset.toDouble()) * 35.0).toFloat()
+                    canvas.drawLine(x.toFloat(), waveY, x.toFloat(), waveY + h, wavePaint)
+                }
+            }
+            VisualTheme.MINIMAL_CLEAN -> {
+                val shader = LinearGradient(
+                    0f, 0f, width.toFloat(), height.toFloat(),
+                    intArrayOf(Color.parseColor("#0F172A"), Color.parseColor("#1E293B")),
+                    null,
+                    Shader.TileMode.CLAMP
+                )
+                bgPaint.shader = shader
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+            }
+            VisualTheme.DARK_STUDIO -> {
+                val shader = LinearGradient(
+                    0f, 0f, 0f, height.toFloat(),
+                    intArrayOf(Color.parseColor("#050505"), Color.parseColor("#1F1135")),
+                    null,
+                    Shader.TileMode.CLAMP
+                )
+                bgPaint.shader = shader
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+            }
+        }
+    }
+
+    private fun drawSubtitleBox(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        text: String,
+        style: SubtitleStyle
+    ) {
+        val horizontalMargin = 32f
+        val boxWidth = width - (horizontalMargin * 2)
+        val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+
+        val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            setStyle(Paint.Style.STROKE)
+        }
+
+        when (style) {
+            SubtitleStyle.BOLD_YELLOW -> {
+                textPaint.color = Color.parseColor("#FFD600")
+                textPaint.textSize = if (width < 800) 34f else 40f
+                boxPaint.color = Color.argb(230, 0, 0, 0)
+                strokePaint.color = Color.parseColor("#FFD600")
+                strokePaint.strokeWidth = 3f
+            }
+            SubtitleStyle.CYAN_NEON -> {
+                textPaint.color = Color.parseColor("#00E5FF")
+                textPaint.textSize = if (width < 800) 32f else 38f
+                boxPaint.color = Color.argb(230, 5, 16, 30)
+                strokePaint.color = Color.parseColor("#00E5FF")
+                strokePaint.strokeWidth = 2.5f
+            }
+            SubtitleStyle.MINIMAL_WHITE -> {
+                textPaint.color = Color.WHITE
+                textPaint.textSize = if (width < 800) 30f else 36f
+                boxPaint.color = Color.argb(210, 15, 23, 42)
+                strokePaint.color = Color.argb(120, 255, 255, 255)
+                strokePaint.strokeWidth = 1.5f
+            }
+        }
+
+        val staticLayout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            StaticLayout.Builder.obtain(text, 0, text.length, textPaint, (boxWidth - 40).toInt())
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .build()
+        } else {
+            @Suppress("DEPRECATION")
+            StaticLayout(text, textPaint, (boxWidth - 40).toInt(), Layout.Alignment.ALIGN_CENTER, 1.1f, 0f, false)
+        }
+
+        val textHeight = staticLayout.height
+        val boxHeight = textHeight + 36f
+        val bottomMargin = 90f
+        val boxTop = height - bottomMargin - boxHeight
+        val rectF = RectF(horizontalMargin, boxTop, horizontalMargin + boxWidth, boxTop + boxHeight)
+
+        canvas.drawRoundRect(rectF, 16f, 16f, boxPaint)
+        canvas.drawRoundRect(rectF, 16f, 16f, strokePaint)
+
+        canvas.save()
+        canvas.translate(horizontalMargin + 20f, boxTop + 18f)
+        staticLayout.draw(canvas)
+        canvas.restore()
+    }
+
+    private fun parseScriptLines(project: VideoProject): List<String> {
+        val raw = if (project.fullScript.isNotBlank()) project.fullScript else "${project.scriptHook}\n${project.scriptIntro}\n${project.scriptBody}\n${project.scriptCta}"
+        val lines = raw.split("\n", "،", "؛", ".")
+            .map { it.trim() }
+            .filter { it.length > 5 }
+        return if (lines.isNotEmpty()) lines else listOf(project.title, project.topic, "YouTube AI Factory")
+    }
+
+    private fun scaleCenterCrop(source: Bitmap, targetWidth: Int, targetHeight: Int): Bitmap {
+        val srcWidth = source.width
+        val srcHeight = source.height
+        val targetRatio = targetWidth.toFloat() / targetHeight
+        val srcRatio = srcWidth.toFloat() / srcHeight
+
+        val scale = if (srcRatio > targetRatio) {
+            targetHeight.toFloat() / srcHeight
+        } else {
+            targetWidth.toFloat() / srcWidth
+        }
+
+        val scaledWidth = (srcWidth * scale).toInt()
+        val scaledHeight = (srcHeight * scale).toInt()
+        val scaled = Bitmap.createScaledBitmap(source, scaledWidth, scaledHeight, true)
+
+        val cropX = ((scaledWidth - targetWidth) / 2).coerceAtLeast(0)
+        val cropY = ((scaledHeight - targetHeight) / 2).coerceAtLeast(0)
+
+        val cropped = Bitmap.createBitmap(scaled, cropX, cropY, targetWidth, targetHeight)
+        if (scaled != cropped && scaled != source) {
+            scaled.recycle()
+        }
+        return cropped
+    }
+
+    private fun rgbToYuv420sp(
+        argb: IntArray,
+        width: Int,
+        height: Int,
+        yuv: ByteArray,
+        colorFormat: Int
+    ) {
+        val frameSize = width * height
+        var yIndex = 0
+        var uvIndex = frameSize
+        var index = 0
+
+        val isSemiPlanar = colorFormat == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
+
+        for (j in 0 until height) {
+            for (i in 0 until width) {
+                val c = argb[index++]
+                val r = (c shr 16) and 0xff
+                val g = (c shr 8) and 0xff
+                val b = c and 0xff
+
+                val y = (66 * r + 129 * g + 25 * b + 128 shr 8) + 16
+                val u = (-38 * r - 74 * g + 112 * b + 128 shr 8) + 128
+                val v = (112 * r - 94 * g - 18 * b + 128 shr 8) + 128
+
+                yuv[yIndex++] = y.coerceIn(0, 255).toByte()
+
+                if (j % 2 == 0 && i % 2 == 0) {
+                    if (isSemiPlanar) {
+                        // NV12 format: U then V interleaved
+                        yuv[uvIndex++] = u.coerceIn(0, 255).toByte()
+                        yuv[uvIndex++] = v.coerceIn(0, 255).toByte()
+                    } else {
+                        // Planar I420
+                        val uOffset = frameSize + (j / 2) * (width / 2) + (i / 2)
+                        val vOffset = frameSize + (frameSize / 4) + (j / 2) * (width / 2) + (i / 2)
+                        if (uOffset < yuv.size) yuv[uOffset] = u.coerceIn(0, 255).toByte()
+                        if (vOffset < yuv.size) yuv[vOffset] = v.coerceIn(0, 255).toByte()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun getSupportedColorFormat(): Int {
+        val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+        for (info in codecList.codecInfos) {
+            if (!info.isEncoder) continue
+            val types = info.supportedTypes
+            for (type in types) {
+                if (type.equals(MediaFormat.MIMETYPE_VIDEO_AVC, ignoreCase = true)) {
+                    val caps = info.getCapabilitiesForType(type)
+                    for (format in caps.colorFormats) {
+                        if (format == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
+                            return format
+                        }
+                    }
+                }
+            }
+        }
+        return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
+    }
+
+    private fun getAudioDurationSeconds(audioUri: Uri): Int? {
+        return try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, audioUri)
+            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+            retriever.release()
+            durationMs?.let { (it / 1000).toInt() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun tryMuxAudio(
+        context: Context,
+        audioUri: Uri,
+        muxer: MediaMuxer,
+        maxDurationUs: Long
+    ) {
+        try {
+            val extractor = MediaExtractor()
+            extractor.setDataSource(context, audioUri, null)
+            var audioTrackIndexInSource = -1
+            var audioFormat: MediaFormat? = null
+
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+                if (mime.startsWith("audio/")) {
+                    audioTrackIndexInSource = i
+                    audioFormat = format
+                    break
+                }
+            }
+
+            if (audioTrackIndexInSource >= 0 && audioFormat != null) {
+                val audioMime = audioFormat.getString(MediaFormat.KEY_MIME) ?: ""
+                // AAC is natively supported in standard MP4 containers by Android MediaMuxer
+                if (audioMime.contains("mp4a") || audioMime.contains("aac")) {
+                    val audioTrackInMuxer = muxer.addTrack(audioFormat)
+                    extractor.selectTrack(audioTrackIndexInSource)
+
+                    val maxBufferSize = if (audioFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                        audioFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+                    } else 64 * 1024
+
+                    val buffer = ByteBuffer.allocate(maxBufferSize)
+                    val bufferInfo = MediaCodec.BufferInfo()
+
+                    while (true) {
+                        val sampleSize = extractor.readSampleData(buffer, 0)
+                        if (sampleSize < 0) break
+
+                        val sampleTime = extractor.sampleTime
+                        if (sampleTime > maxDurationUs) break
+
+                        bufferInfo.offset = 0
+                        bufferInfo.size = sampleSize
+                        bufferInfo.presentationTimeUs = sampleTime
+                        bufferInfo.flags = extractor.sampleFlags
+
+                        muxer.writeSampleData(audioTrackInMuxer, buffer, bufferInfo)
+                        extractor.advance()
+                    }
+                }
+            }
+            extractor.release()
+        } catch (e: Exception) {
+            Log.w("VideoRenderer", "Audio muxing warning (non-fatal, video remains playable)", e)
+        }
+    }
+
+    private fun registerInMediaStore(context: Context, videoFile: File, title: String): Uri? {
+        return try {
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.TITLE, title)
+                put(MediaStore.Video.Media.DISPLAY_NAME, videoFile.name)
+                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                put(MediaStore.Video.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/YouTubeAIFactory")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                }
+            }
+
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            }
+
+            val uri = context.contentResolver.insert(collection, values)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    videoFile.inputStream().use { input ->
+                        input.copyTo(output)
+                    }
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    values.clear()
+                    values.put(MediaStore.Video.Media.IS_PENDING, 0)
+                    context.contentResolver.update(uri, values, null, null)
+                }
+            }
+            uri
+        } catch (e: Exception) {
+            Log.e("VideoRenderer", "Failed to register in MediaStore", e)
+            null
+        }
+    }
+}
