@@ -24,7 +24,8 @@ class PreferencesManager(context: Context) {
     private val _channelHandle = MutableStateFlow(prefs.getString("channel_handle", "@AIFactoryOfficial") ?: "@AIFactoryOfficial")
     val channelHandle: StateFlow<String> = _channelHandle.asStateFlow()
 
-    private val _automationEnabled = MutableStateFlow(prefs.getBoolean("auto_enabled", true))
+    // Automation is not implemented yet; a fresh install must never imply it is running.
+    private val _automationEnabled = MutableStateFlow(false)
     val automationEnabled: StateFlow<Boolean> = _automationEnabled.asStateFlow()
 
     private val _automationTime = MutableStateFlow(prefs.getString("auto_time", "18:30") ?: "18:30")
@@ -64,8 +65,9 @@ class PreferencesManager(context: Context) {
     }
 
     fun setAutomationEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean("auto_enabled", enabled).apply()
-        _automationEnabled.value = enabled
+        // Do not persist a misleading enabled state until a real scheduler is installed.
+        prefs.edit().putBoolean("auto_enabled", false).apply()
+        _automationEnabled.value = false
     }
 
     fun setAutomationTime(time: String) {
