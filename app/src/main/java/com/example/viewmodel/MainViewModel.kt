@@ -15,8 +15,16 @@ import com.example.model.VideoFormat
 import com.example.model.VideoStatus
 import com.example.model.VisualTheme
 import com.example.model.VoiceStyle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -69,6 +77,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val editingProjectId: StateFlow<Long?> = _editingProjectId.asStateFlow()
 
     val topicInput = MutableStateFlow("")
+    // Bring-your-own Gemini key is kept in memory only; it is never written to preferences or the database.
+    val geminiApiKey = MutableStateFlow("")
+    private val _isGeneratingScript = MutableStateFlow(false)
+    val isGeneratingScript: StateFlow<Boolean> = _isGeneratingScript.asStateFlow()
+    private val geminiHttpClient = OkHttpClient.Builder()
+        .callTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .build()
     val contentLang = MutableStateFlow("fa")
     val formatSelection = MutableStateFlow(VideoFormat.SHORTS)
     val durationSec = MutableStateFlow(60)
@@ -191,56 +208,81 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun generateAiScript() {
-        val topic = topicInput.value.ifBlank {
-            if (contentLang.value == "fa") "روش‌های افزایش تمرکز با تکنیک پومودورو" else "5 Productivity Habits for High Achievers"
-        }
-        topicInput.value = topic
-
-        if (contentLang.value == "fa") {
-            val isShort = formatSelection.value == VideoFormat.SHORTS
-            if (isShort) {
-                titleInput.value = "سه ترفند طلایی برای $topic که هیچ‌کس بهت نمی‌گه!"
-                hookInput.value = "اگه فکر می‌کنی $topic سخته، این ۳۰ ثانیه رو ببین تا نظرت برای همیشه عوض بشه!"
-                introInput.value = "سلام بچه‌ها! امروز بدون حاشیه می‌خوایم مهم‌ترین فرمول موفقیت در این زمینه رو مرور کنیم."
-                bodyInput.value = "نکته اول: شروع با قدم‌های ۲ دقیقه‌ای.\nنکته دوم: حذف تمام نوتیفیکیشن‌ها.\nنکته سوم: بازبینی هفتگی پیشرفت."
-                ctaInput.value = "این ویدیو رو برای دوست پرتلاشت بفرست و سابسکرایب کن!"
-                outroInput.value = "ویدیو بعدی رو از دست نده، تا فردا!"
-                descriptionInput.value = "در این ویدیوی کوتاه شورتس، نکات کلیدی و کاربردی درباره $topic را آموزش می‌دهیم. سابسکرایب کانال برای ویدیوهای روزانه فراموش نشود!"
-                tagsInput.value = "$topic, آموزش سریع, یوتیوب شورتس, نکات طلایی, موفقیت"
-            } else {
-                titleInput.value = "راهنمای جامع و صفر تا صد $topic | استراتژی ۲۰۲۵"
-                hookInput.value = "چرا ۹۵ درصد از افراد در $topic شکست می‌خورند و راز ۵ درصدی که به نتیجه می‌رسند چیه؟"
-                introInput.value = "در این ویدیوی کامل و تحلیلی، تمام ابعاد، ابزارها و نقشه‌راه عملیاتی را با جزئیات بررسی می‌کنیم."
-                bodyInput.value = "فصل اول: مفاهیم پایه و تغییر ذهنیت.\nفصل دوم: ابزارهای خودکارسازی و هوش مصنوعی لازم.\nفصل سوم: اشتباهات مهلکی که باید از آن‌ها دوری کنید.\nفصل چهارم: برنامه اقدام ۳۰ روزه برای رسیدن به نتیجه ملموس."
-                ctaInput.value = "اگر این راهنما براتون مفید بود، حتماً ویدیو رو لایک کنید و نظرتون رو در کامنت‌ها بنویسید."
-                outroInput.value = "فایل‌ها و لینک‌های تکمیلی در توضیحات قرار گرفته است. موفق باشید!"
-                descriptionInput.value = "ویدیوی جامع بررسی $topic به همراه نقشه راه عملیاتی برای علاقه‌مندان و تولیدکنندگان محتوا."
-                tagsInput.value = "$topic, آموزش یوتیوب, استراتژی, راهنمای جامع, درآمدزایی"
+        val topic = topicInput.value.trim()
+        val apiKey = geminiApiKey.value.trim()
+        if (topic.isBlank()) {
+            viewModelScope.launch {
+                _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "ابتدا موضوع ویدیو را وارد کنید." else "Enter a video topic first.")
             }
-        } else {
-            val isShort = formatSelection.value == VideoFormat.SHORTS
-            if (isShort) {
-                titleInput.value = "Stop Doing This! The Secret to $topic in 60 Seconds"
-                hookInput.value = "If you are still struggling with $topic, stop scrolling right now and listen up!"
-                introInput.value = "Welcome back! Today we are exposing the number one mistake 90% of beginners make."
-                bodyInput.value = "Step 1: Focus on consistency over intensity.\nStep 2: Automate repetitive workflows.\nStep 3: Track your daily metrics."
-                ctaInput.value = "Smash the subscribe button and drop your thoughts below!"
-                outroInput.value = "Catch you in the next viral breakdown!"
-                descriptionInput.value = "Essential insights and practical tips on $topic. Subscribe for daily high-impact Shorts!"
-                tagsInput.value = "$topic, Shorts, Productivity, LifeHacks, AI Tools"
-            } else {
-                titleInput.value = "The Complete Blueprint to $topic (Step-by-Step Guide)"
-                hookInput.value = "What separates high performers in $topic from everyone else? It comes down to one single framework."
-                introInput.value = "In this comprehensive guide, we will unpack the exact blueprint you need to master this domain."
-                bodyInput.value = "Section 1: Foundations and Mindset.\nSection 2: The Core Execution Engine.\nSection 3: Real-World Case Studies.\nSection 4: Your 30-Day Implementation Checklist."
-                ctaInput.value = "If this breakdown provided value, please hit like and subscribe for more in-depth masterclasses."
-                outroInput.value = "All resource links and checklists are in the description below. See you next week!"
-                descriptionInput.value = "Full breakdown and step-by-step masterclass covering $topic with actionable workflows."
-                tagsInput.value = "$topic, Masterclass, StepByStep, YouTube Growth, Blueprint"
-            }
+            return
         }
+        if (apiKey.isBlank()) {
+            viewModelScope.launch {
+                _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "برای تولید واقعی، کلید API جمینای را در همین صفحه وارد کنید. کلید فقط تا بسته‌شدن برنامه در حافظه می‌ماند." else "For real generation, enter your Gemini API key on this screen. It stays in memory only until the app closes.")
+            }
+            return
+        }
+        if (_isGeneratingScript.value) return
+        _isGeneratingScript.value = true
         viewModelScope.launch {
-            _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "قالب اولیه سناریو ساخته شد؛ تولید هوش مصنوعی هنوز به مدل واقعی متصل نیست" else "A starter script template was created; no real AI model is connected yet")
+            try {
+                val generated = withContext(Dispatchers.IO) {
+                    requestGeminiScript(apiKey, topic)
+                }
+                titleInput.value = generated.optString("title").trim().ifBlank { error("AI response did not include a title.") }
+                hookInput.value = generated.optString("hook").trim()
+                introInput.value = generated.optString("intro").trim()
+                bodyInput.value = generated.optString("body").trim()
+                ctaInput.value = generated.optString("cta").trim()
+                outroInput.value = generated.optString("outro").trim()
+                descriptionInput.value = generated.optString("description").trim()
+                tagsInput.value = generated.optString("tags").trim()
+                _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "سناریو با پاسخ واقعی Gemini تولید شد؛ قبل از ذخیره بازبینی کنید." else "Script generated by Gemini. Review it before saving.")
+            } catch (e: Exception) {
+                val message = when {
+                    e.message?.contains("HTTP 400") == true -> "درخواست Gemini پذیرفته نشد؛ کلید، مدل یا تنظیمات API را بررسی کنید."
+                    e.message?.contains("HTTP 401") == true || e.message?.contains("HTTP 403") == true -> "دسترسی Gemini رد شد؛ اعتبار کلید و دسترسی API را بررسی کنید."
+                    e.message?.contains("HTTP 429") == true -> "سهمیه یا محدودیت درخواست Gemini پر شده است؛ بعداً دوباره تلاش کنید."
+                    else -> e.message?.take(220) ?: "خطای نامشخص در ارتباط با Gemini."
+                }
+                _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "تولید هوش مصنوعی انجام نشد: $message" else "AI generation failed: $message")
+            } finally {
+                _isGeneratingScript.value = false
+            }
+        }
+    }
+
+    private fun requestGeminiScript(apiKey: String, topic: String): JSONObject {
+        val language = if (contentLang.value == "fa") "Persian (Farsi)" else "English"
+        val format = if (formatSelection.value == VideoFormat.SHORTS) "YouTube Short" else "long-form YouTube video"
+        val tone = toneSelection.value.name
+        val prompt = """
+            Create a useful, specific, non-clickbait $format script about: $topic.
+            Output language: $language. Tone: $tone. Target duration: ${durationSec.value} seconds.
+            Return ONLY a valid JSON object with exactly these string fields:
+            title, hook, intro, body, cta, outro, description, tags.
+            Make the body substantive and relevant to the topic. Do not invent factual statistics or sources.
+            tags should be comma-separated. Do not wrap JSON in markdown fences.
+        """.trimIndent()
+        val requestJson = JSONObject()
+            .put("contents", org.json.JSONArray().put(
+                JSONObject().put("parts", org.json.JSONArray().put(JSONObject().put("text", prompt)))
+            ))
+            .put("generationConfig", JSONObject().put("responseMimeType", "application/json"))
+        val body = requestJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder()
+            .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + java.net.URLEncoder.encode(apiKey, "UTF-8"))
+            .post(body)
+            .build()
+        geminiHttpClient.newCall(request).execute().use { response ->
+            val responseText = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}: ${responseText.take(300)}")
+            val root = JSONObject(responseText)
+            val text = root.optJSONArray("candidates")?.optJSONObject(0)
+                ?.optJSONObject("content")?.optJSONArray("parts")?.optJSONObject(0)?.optString("text")
+                ?: throw IllegalStateException("Gemini returned no text.")
+            val jsonText = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+            return JSONObject(jsonText)
         }
     }
 
