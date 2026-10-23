@@ -66,11 +66,11 @@ fun AnalyticsScreen(
 
     // Aggregate metrics from published projects
     val publishedProjects = projects.filter { it.isUploaded }
-    val baseViews = if (isConnected) 61370L else 0L
-    val totalViews = baseViews + publishedProjects.sumOf { it.viewsCount }
-    val subscribers = if (isConnected) "1,420" else "0"
-    val watchHours = if (isConnected) "840h" else "0h"
-    val avgRetention = if (isConnected) "72.4%" else "--"
+    // Do not show fabricated channel statistics. The app currently has no YouTube Analytics API connection.
+    val totalViews = publishedProjects.sumOf { it.viewsCount }
+    val subscribers = "--"
+    val watchHours = "--"
+    val avgRetention = "--"
 
     LazyColumn(
         modifier = modifier
@@ -129,9 +129,15 @@ fun AnalyticsScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = if (isConnected)
-                            "${AppStrings.get("anal_notice_connected", lang)} ($channelName)"
+                            if (lang == AppLanguage.PERSIAN)
+                                "وضعیت اتصال ذخیره‌شده است؛ آمار واقعی هنوز از YouTube Analytics API دریافت نمی‌شود."
+                            else
+                                "A saved connection flag is not proof of OAuth; live metrics are not fetched from YouTube Analytics API."
                         else
-                            AppStrings.get("anal_notice_disconnected", lang),
+                            if (lang == AppLanguage.PERSIAN)
+                                "آمار زنده در دسترس نیست؛ اتصال واقعی یوتیوب و YouTube Analytics API هنوز پیکربندی نشده‌اند."
+                            else
+                                "Live analytics are unavailable until real YouTube OAuth and YouTube Analytics API are configured.",
                         color = TextWhite,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
