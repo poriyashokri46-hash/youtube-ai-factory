@@ -190,7 +190,7 @@ fun AnalyticsScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Weekly Views Trend Chart
+            // Do not draw a fake zero-valued chart; show a truthful unavailable state instead.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = SurfaceNavyCard),
@@ -199,62 +199,21 @@ fun AnalyticsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = if (lang == AppLanguage.PERSIAN) "روند هفتگی بازدیدها (Views Trend)" else "Weekly Views Trend",
+                        text = if (lang == AppLanguage.PERSIAN) "روند بازدیدها" else "Views trend",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = TextWhite
                     )
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Custom Canvas Bar Chart
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                    ) {
-                        val days = listOf("Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri")
-                        val values = listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f)
-                        val maxVal = 130f
-                        val w = size.width
-                        val h = size.height
-                        val barWidth = 26f
-                        val gap = (w - (days.size * barWidth)) / (days.size + 1)
-
-                        // Grid lines
-                        for (i in 1..3) {
-                            val y = h * (i / 4f)
-                            drawLine(
-                                color = Color(0xFF1E283E),
-                                start = Offset(0f, y),
-                                end = Offset(w, y),
-                                strokeWidth = 1f
-                            )
-                        }
-
-                        // Draw Bars
-                        values.forEachIndexed { idx, v ->
-                            val x = gap + idx * (barWidth + gap)
-                            val barH = (v / maxVal) * (h - 20f)
-                            val y = h - barH
-
-                            drawRoundRect(
-                                color = if (idx >= 5) ElectricViolet else NeonCyan,
-                                topLeft = Offset(x, y),
-                                size = Size(barWidth, barH),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f)
-                            )
-                        }
-                    }
-
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        listOf("شنبه", "۱شنبه", "۲شنبه", "۳شنبه", "۴شنبه", "۵شنبه", "جمعه").forEach { d ->
-                            Text(text = d, color = TextMuted, fontSize = 10.sp)
-                        }
-                    }
+                    Text(
+                        text = if (lang == AppLanguage.PERSIAN)
+                            "هنوز دادهٔ زنده‌ای از YouTube Analytics دریافت نشده است؛ نمودار پس از پیاده‌سازی اتصال رسمی و دریافت داده نمایش داده می‌شود."
+                        else
+                            "No live YouTube Analytics data has been retrieved. A chart will appear after the official API connection is implemented and data is fetched.",
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp
+                    )
                 }
             }
 
