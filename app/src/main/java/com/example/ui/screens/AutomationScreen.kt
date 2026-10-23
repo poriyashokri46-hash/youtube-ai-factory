@@ -110,9 +110,9 @@ fun AutomationScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = if (lang == AppLanguage.PERSIAN)
-                            "شفاف‌سازی: این نسخه هنوز WorkManager یا ورکر ابری را برای اجرای واقعی زمان‌بندی‌ها راه‌اندازی نکرده است. این تنظیم فقط ترجیح شما را ذخیره می‌کند؛ اجرای خودکار تا زمان پیاده‌سازی غیرفعال است."
+                            "زمان‌بندی فعلاً غیرفعال است؛ این صفحه هنوز وظیفهٔ واقعی پس‌زمینه ایجاد نمی‌کند و هیچ ویدئویی را خودکار تولید یا منتشر نمی‌کند."
                         else
-                            "Disclosure: this build does not schedule real WorkManager jobs or run a cloud worker. This setting only stores your preference; automatic execution is not implemented yet.",
+                            "Scheduling is currently disabled. This screen does not create a real background job or automatically generate or publish videos.",
                         color = TextWhite,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
@@ -145,8 +145,8 @@ fun AutomationScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (automationEnabled) "Active Engine" else "Paused",
-                                color = if (automationEnabled) NeonCyan else Color(0xFFEF4444),
+                                text = if (lang == AppLanguage.PERSIAN) "هنوز پیاده‌سازی نشده" else "Not implemented",
+                                color = Color(0xFFEF4444),
                                 fontSize = 12.sp
                             )
                         }
@@ -154,6 +154,7 @@ fun AutomationScreen(
                         Switch(
                             checked = automationEnabled,
                             onCheckedChange = { viewModel.toggleAutomation(it) },
+                            enabled = false,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color(0xFF001F24),
                                 checkedTrackColor = NeonCyan,
