@@ -109,9 +109,9 @@ fun PublishingScreen(
                 Column {
                     Text(
                         text = if (lang == AppLanguage.PERSIAN)
-                            "کارخانه هوش مصنوعی یوتیوب جهت آپلود ویدیو به دسترسی مجاز یوتیوب (youtube.upload) نیاز دارد.\n\n✓ رمز عبور شما هرگز دریافت نمی‌شود\n✓ ارتباط مستقیم با سرورهای گوگل برقرار است\n✓ مجوزها در هر زمان قابل لغو هستند"
+                            "این نسخه هنوز ورود واقعی Google OAuth یا مجوز آپلود یوتیوب را پیاده‌سازی نکرده است.\n\nهیچ حسابی در این مرحله متصل نمی‌شود\nهیچ ارتباط OAuth با سرورهای گوگل برقرار نمی‌شود\nانتشار واقعی تا زمان پیکربندی API غیرفعال است"
                         else
-                            "YouTube AI Factory requests authorized access (youtube.upload) to schedule and upload videos to your channel.\n\n✓ Your password is never asked or stored\n✓ Direct Google OAuth 2.0 authentication\n✓ Revocable anytime from your Google Account",
+                            "Real Google OAuth and YouTube upload are not implemented in this build.\n\nNo account is connected by this screen\nNo Google OAuth request is made\nPublishing remains unavailable until the API is configured",
                         color = TextMuted,
                         fontSize = 13.sp,
                         lineHeight = 20.sp
@@ -126,7 +126,7 @@ fun PublishingScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
                 ) {
-                    Text(text = if (lang == AppLanguage.PERSIAN) "تایید و اتصال کانال" else "Authorize & Connect", color = Color(0xFF001F24), fontWeight = FontWeight.Bold)
+                    Text(text = if (lang == AppLanguage.PERSIAN) "متوجه شدم" else "Got it", color = Color(0xFF001F24), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
