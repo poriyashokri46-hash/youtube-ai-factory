@@ -15,7 +15,7 @@ class PreferencesManager(context: Context) {
     )
     val appLanguage: StateFlow<AppLanguage> = _appLanguage.asStateFlow()
 
-    private val _isYouTubeConnected = MutableStateFlow(prefs.getBoolean("yt_connected", false))
+    private val _isYouTubeConnected = MutableStateFlow(loadYouTubeConnectionFlag())
     val isYouTubeConnected: StateFlow<Boolean> = _isYouTubeConnected.asStateFlow()
 
     private val _channelName = MutableStateFlow(prefs.getString("channel_name", "AI Factory Studio") ?: "AI Factory Studio")
@@ -29,6 +29,18 @@ class PreferencesManager(context: Context) {
 
     private val _automationTime = MutableStateFlow(prefs.getString("auto_time", "18:30") ?: "18:30")
     val automationTime: StateFlow<String> = _automationTime.asStateFlow()
+
+    private fun loadYouTubeConnectionFlag(): Boolean {
+        // Earlier builds set this flag without completing OAuth. Clear that legacy fake state once.
+        if (!prefs.getBoolean("oauth_truth_migration_v1", false)) {
+            prefs.edit()
+                .putBoolean("yt_connected", false)
+                .putBoolean("oauth_truth_migration_v1", true)
+                .apply()
+            return false
+        }
+        return prefs.getBoolean("yt_connected", false)
+    }
 
     fun setLanguage(language: AppLanguage) {
         prefs.edit().putString("app_lang", language.code).apply()
