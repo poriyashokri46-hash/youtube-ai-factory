@@ -602,14 +602,16 @@ class VideoRenderer(private val context: Context) {
     }
 
     private fun getAudioDurationSeconds(audioUri: Uri): Int? {
+        val retriever = MediaMetadataRetriever()
         return try {
-            val retriever = MediaMetadataRetriever()
             retriever.setDataSource(context, audioUri)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-            retriever.release()
             durationMs?.let { (it / 1000).toInt() }
         } catch (e: Exception) {
+            Log.w("VideoRenderer", "Could not read audio duration; using project duration.", e)
             null
+        } finally {
+            runCatching { retriever.release() }
         }
     }
 
