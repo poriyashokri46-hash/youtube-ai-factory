@@ -260,24 +260,42 @@ fun AnalyticsScreen(
                     )
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    val sources = listOf(
-                        Triple(AppStrings.get("anal_traffic_shorts", lang), "68%", NeonCyan),
-                        Triple(AppStrings.get("anal_traffic_search", lang), "21%", ElectricViolet),
-                        Triple(AppStrings.get("anal_traffic_suggested", lang), "11%", Color(0xFF10B981))
-                    )
-
-                    sources.forEach { (label, percent, color) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(8.dp).background(color, androidx.compose.foundation.shape.CircleShape))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = label, color = TextWhite, fontSize = 12.sp)
+                    val sources = analytics?.trafficSources.orEmpty()
+                    if (sources.isEmpty()) {
+                        Text(
+                            text = if (lang == AppLanguage.PERSIAN) "دادهٔ منبع بازدید در دسترس نیست." else "No traffic-source data is available.",
+                            color = TextMuted,
+                            fontSize = 12.sp
+                        )
+                    } else {
+                        val totalSourceViews = sources.sumOf { it.second }.coerceAtLeast(1L)
+                        sources.take(8).forEachIndexed { index, source ->
+                            val label = when (source.first) {
+                                "YT_SEARCH" -> if (lang == AppLanguage.PERSIAN) "جستجوی یوتیوب" else "YouTube Search"
+                                "RELATED_VIDEO" -> if (lang == AppLanguage.PERSIAN) "ویدیوهای مرتبط" else "Related videos"
+                                "BROWSE_FEATURES" -> if (lang == AppLanguage.PERSIAN) "صفحهٔ اصلی و مرور" else "Browse features"
+                                "SHORTS" -> "Shorts"
+                                "EXT_URL" -> if (lang == AppLanguage.PERSIAN) "منابع خارجی" else "External"
+                                "NOTIFICATION" -> if (lang == AppLanguage.PERSIAN) "اعلان‌ها" else "Notifications"
+                                else -> source.first.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
                             }
-                            Text(text = percent, color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            val percent = source.second.toFloat() / totalSourceViews.toFloat()
+                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = label, color = TextWhite, fontSize = 12.sp)
+                                    Text(text = "${(percent * 100).toInt()}% • ${String.format("%,d", source.second)}", color = NeonCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                LinearProgressIndicator(
+                                    progress = { percent },
+                                    modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
+                                    color = if (index % 2 == 0) NeonCyan else ElectricViolet,
+                                    trackColor = Color(0xFF1E283E)
+                                )
+                            }
                         }
                     }
                 }
