@@ -32,15 +32,10 @@ class PreferencesManager(context: Context) {
     val automationTime: StateFlow<String> = _automationTime.asStateFlow()
 
     private fun loadYouTubeConnectionFlag(): Boolean {
-        // Earlier builds set this flag without completing OAuth. Clear that legacy fake state once.
-        if (!prefs.getBoolean("oauth_truth_migration_v1", false)) {
-            prefs.edit()
-                .putBoolean("yt_connected", false)
-                .putBoolean("oauth_truth_migration_v1", true)
-                .apply()
-            return false
-        }
-        return prefs.getBoolean("yt_connected", false)
+        // OAuth access tokens are intentionally memory-only. Never restore a "connected" UI state
+        // after process death when the in-memory token required for API calls is gone.
+        prefs.edit().putBoolean("yt_connected", false).apply()
+        return false
     }
 
     fun hasLegacyTruthCleanupRun(): Boolean =
