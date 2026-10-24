@@ -723,6 +723,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             } catch (e: Exception) {
                 youtubeAccessToken = null
+                _youtubeAnalytics.value = null
                 preferencesManager.setYouTubeConnected(false)
                 android.util.Log.e("MainViewModel", "YouTube authorization verification failed", e)
                 _snackbarMessage.emit(
@@ -737,6 +738,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun disconnectYouTube() {
         youtubeAccessToken = null
+        _youtubeAnalytics.value = null
         preferencesManager.setYouTubeConnected(false)
         viewModelScope.launch {
             _snackbarMessage.emit(
@@ -823,6 +825,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val message = e.localizedMessage ?: "Unknown upload error."
                 if (message.contains("HTTP 401")) {
                     youtubeAccessToken = null
+                    _youtubeAnalytics.value = null
                     preferencesManager.setYouTubeConnected(false)
                 }
                 _snackbarMessage.emit(
@@ -855,6 +858,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 android.util.Log.e("MainViewModel", "YouTube Analytics request failed", e)
                 if ((e.localizedMessage ?: "").contains("HTTP 401")) {
                     youtubeAccessToken = null
+                    _youtubeAnalytics.value = null
                     preferencesManager.setYouTubeConnected(false)
                 }
                 _snackbarMessage.emit(
