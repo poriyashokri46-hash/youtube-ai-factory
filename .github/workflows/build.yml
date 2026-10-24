@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    name: Validate code; build artifacts on final-build request
+    name: Test and build Android artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -61,25 +61,23 @@ jobs:
         run: ./gradlew testDebugUnitTest --no-daemon
 
       - name: Build Debug APK
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[final-build]'))
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Build Debug AAB (Android App Bundle)
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[final-build]'))
         run: ./gradlew bundleDebug --no-daemon
 
       - name: Upload APK Artifact
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[final-build]'))
         uses: actions/upload-artifact@v4
         with:
           name: YouTube-AI-Factory-APK
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
           retention-days: 30
 
       - name: Upload AAB Artifact
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[final-build]'))
         uses: actions/upload-artifact@v4
         with:
           name: YouTube-AI-Factory-AAB
           path: app/build/outputs/bundle/debug/*.aab
+          if-no-files-found: error
           retention-days: 30
