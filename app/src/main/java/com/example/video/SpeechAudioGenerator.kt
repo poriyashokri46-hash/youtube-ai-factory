@@ -10,6 +10,7 @@ import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.io.RandomAccessFile
@@ -34,7 +35,7 @@ class SpeechAudioGenerator(private val context: Context) {
         val id = UUID.randomUUID().toString()
         val wavFile = File(context.cacheDir, "narration_$id.wav")
         val m4aFile = File(context.getExternalFilesDir(null) ?: context.filesDir, "narration_$id.m4a")
-        val engine = createTts()
+        val engine = withContext(Dispatchers.Main) { createTts() }
         try {
             engine.setSpeechRate(speechRate.coerceIn(0.75f, 1.5f))
             val locale = if (languageCode.equals("fa", ignoreCase = true)) Locale("fa", "IR") else Locale.US
@@ -85,8 +86,10 @@ class SpeechAudioGenerator(private val context: Context) {
             throw e
         } finally {
             wavFile.delete()
-            runCatching { engine.stop() }
-            runCatching { engine.shutdown() }
+            withContext(Dispatchers.Main) {
+                runCatching { engine.stop() }
+                runCatching { engine.shutdown() }
+            }
         }
     }
 
