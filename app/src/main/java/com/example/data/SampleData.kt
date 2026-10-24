@@ -117,36 +117,6 @@ object SampleData {
         )
     )
 
-    fun getInitialTasks(): List<AutomationTask> = listOf(
-        AutomationTask(
-            id = 1,
-            title = "تولید روزانه: ۵ ابزار برنامه‌نویسی با پایتون",
-            format = "SHORTS",
-            language = "fa",
-            scheduledTimeStr = "18:00 (امروز)",
-            status = "COMPLETED",
-            logMessage = "سناریو نگارش شد، صدا تولید گردید و ویدیو با موفقیت رندر شد.",
-            timestamp = System.currentTimeMillis() - 3600000L * 4
-        ),
-        AutomationTask(
-            id = 2,
-            title = "پایش ترندهای تکنولوژی و ساخت پیش‌نویس",
-            format = "SHORTS",
-            language = "fa",
-            scheduledTimeStr = "12:00 (فردا)",
-            status = "QUEUED",
-            logMessage = "در صف پردازش موتور هوش مصنوعی برای زمان‌بندی ظهر.",
-            timestamp = System.currentTimeMillis() - 3600000L * 1
-        ),
-        AutomationTask(
-            id = 3,
-            title = "Daily YouTube Short: Top 3 Crypto Market Moves",
-            format = "SHORTS",
-            language = "en",
-            scheduledTimeStr = "20:00 (Scheduled)",
-            status = "PENDING_APPROVAL",
-            logMessage = "Script and captions generated. Awaiting creator review before final render.",
-            timestamp = System.currentTimeMillis() - 7200000L
-        )
-    )
+    // Automation is not implemented; never provide simulated tasks as if they ran.
+    fun getInitialTasks(): List<AutomationTask> = emptyList()
 }
