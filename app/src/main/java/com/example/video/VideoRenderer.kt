@@ -161,15 +161,21 @@ class VideoRenderer(private val context: Context) {
 
                 // Feed to MediaCodec
                 var inputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
-                while (inputIndex < 0) {
+                var inputWaitAttempts = 0
+                while (inputIndex < 0 && inputWaitAttempts < 500) {
                     drainEncoder(videoEncoder, muxer, bufferInfo, timeoutUs) { track ->
                         videoTrackIndex = track
                         muxerStarted = true
                     }
                     inputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
+                    inputWaitAttempts++
+                }
+                if (inputIndex < 0) {
+                    throw IllegalStateException("Video encoder did not provide an input buffer.")
                 }
 
-                val inputBuffer = videoEncoder.getInputBuffer(inputIndex)!!
+                val inputBuffer = videoEncoder.getInputBuffer(inputIndex)
+                    ?: throw IllegalStateException("Video encoder returned an invalid input buffer.")
                 inputBuffer.clear()
                 inputBuffer.put(yuvBuffer)
                 val presentationTimeUs = (frameIndex * 1_000_000L) / fps
@@ -185,12 +191,17 @@ class VideoRenderer(private val context: Context) {
             // Signal End of Stream. Wait for an input slot rather than silently writing a
             // truncated MP4 if the encoder is temporarily out of input buffers.
             var eosInputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
-            while (eosInputIndex < 0) {
+            var eosInputWaitAttempts = 0
+            while (eosInputIndex < 0 && eosInputWaitAttempts < 500) {
                 drainEncoder(videoEncoder, muxer, bufferInfo, timeoutUs) { track ->
                     videoTrackIndex = track
                     muxerStarted = true
                 }
                 eosInputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
+                eosInputWaitAttempts++
+            }
+            if (eosInputIndex < 0) {
+                throw IllegalStateException("Video encoder did not accept the end-of-stream signal.")
             }
             val lastPtsUs = (totalFrames * 1_000_000L) / fps
             videoEncoder.queueInputBuffer(
