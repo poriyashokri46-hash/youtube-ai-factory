@@ -263,7 +263,7 @@ class SpeechAudioGenerator(private val context: Context) {
                     }
                     outputIndex >= 0 -> {
                         val buffer = encoder.getOutputBuffer(outputIndex)
-                        if (buffer != null && info.size > 0) {
+                        if (buffer != null && info.size > 0 && info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
                             if (!muxerStarted) throw IllegalStateException("AAC encoder produced data before its output format.")
                             buffer.position(info.offset)
                             buffer.limit(info.offset + info.size)
