@@ -182,23 +182,43 @@ class VideoRenderer(private val context: Context) {
                 }
             }
 
-            // Signal End of Stream
-            val eosInputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
-            if (eosInputIndex >= 0) {
-                val lastPtsUs = (totalFrames * 1_000_000L) / fps
-                videoEncoder.queueInputBuffer(eosInputIndex, 0, 0, lastPtsUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-            }
-
-            // Drain remaining
-            while (true) {
-                val status = drainEncoder(videoEncoder, muxer, bufferInfo, timeoutUs) { track ->
+            // Signal End of Stream. Wait for an input slot rather than silently writing a
+            // truncated MP4 if the encoder is temporarily out of input buffers.
+            var eosInputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
+            while (eosInputIndex < 0) {
+                drainEncoder(videoEncoder, muxer, bufferInfo, timeoutUs) { track ->
                     videoTrackIndex = track
                     muxerStarted = true
                 }
-                if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
-                    break
+                eosInputIndex = videoEncoder.dequeueInputBuffer(timeoutUs)
+            }
+            val lastPtsUs = (totalFrames * 1_000_000L) / fps
+            videoEncoder.queueInputBuffer(
+                eosInputIndex,
+                0,
+                0,
+                lastPtsUs,
+                MediaCodec.BUFFER_FLAG_END_OF_STREAM
+            )
+
+            // Drain until the encoder explicitly signals EOS. A timeout is an error, not success.
+            var eosSeen = false
+            var emptyDrainAttempts = 0
+            while (!eosSeen && emptyDrainAttempts < 500) {
+                bufferInfo.flags = 0
+                val hadOutput = drainEncoder(videoEncoder, muxer, bufferInfo, timeoutUs) { track ->
+                    videoTrackIndex = track
+                    muxerStarted = true
                 }
-                if (!status) break
+                eosSeen = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                if (!hadOutput && !eosSeen) {
+                    emptyDrainAttempts++
+                } else {
+                    emptyDrainAttempts = 0
+                }
+            }
+            if (!eosSeen) {
+                throw IllegalStateException("Video encoder did not finish the MP4 stream.")
             }
 
             onProgress(92, "در حال میکس صوت و نهایی‌سازی ساختار MP4...")
