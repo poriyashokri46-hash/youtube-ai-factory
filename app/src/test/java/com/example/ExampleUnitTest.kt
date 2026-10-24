@@ -72,6 +72,7 @@ class ExampleUnitTest {
     fun sampleProjectsNeverClaimToBeRenderedOrPublished() {
         val projects = SampleData.getInitialProjects()
         assertTrue(projects.isNotEmpty())
+        assertTrue(SampleData.getInitialTasks().isEmpty())
         projects.forEach { project ->
             assertEquals("DRAFT", project.status)
             assertEquals(false, project.isUploaded)
