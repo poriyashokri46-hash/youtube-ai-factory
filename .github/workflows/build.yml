@@ -53,6 +53,10 @@ jobs:
               -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US"
           fi
 
+      - name: Print final debug signing certificate SHA-1 for OAuth setup
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[final-build]')
+        run: keytool -list -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android | grep -E 'SHA1:|SHA-1:'
+
       - name: Run Unit Tests
         run: ./gradlew testDebugUnitTest --no-daemon
 
