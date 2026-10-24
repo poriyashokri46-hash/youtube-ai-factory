@@ -62,7 +62,7 @@ class YouTubeApiClient {
     fun getAnalytics(accessToken: String): YouTubeAnalyticsReport {
         val end = Calendar.getInstance()
         val start = end.clone() as Calendar
-        start.add(Calendar.DAY_OF_YEAR, -28)
+        start.add(Calendar.DAY_OF_YEAR, -27)
         val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val startDate = dateFormat.format(start.time)
         val endDate = dateFormat.format(end.time)
@@ -71,8 +71,8 @@ class YouTubeApiClient {
         var views = 0L
         var watchMinutes = 0.0
         var subscribersGained = 0L
-        var averageViewPercentage = 0.0
-        var percentageDays = 0
+        var weightedViewPercentage = 0.0
+        var percentageWeight = 0L
         val dailyViews = mutableListOf<Pair<String, Long>>()
         if (rows != null) {
             for (i in 0 until rows.length()) {
@@ -84,7 +84,10 @@ class YouTubeApiClient {
                 watchMinutes += row.optDouble(2, 0.0)
                 subscribersGained += row.optLong(3, 0L)
                 val percent = row.optDouble(4, Double.NaN)
-                if (!percent.isNaN()) { averageViewPercentage += percent; percentageDays++ }
+                if (!percent.isNaN() && dayViews > 0L) {
+                    weightedViewPercentage += percent * dayViews
+                    percentageWeight += dayViews
+                }
                 dailyViews += day to dayViews
             }
         }
@@ -98,7 +101,14 @@ class YouTubeApiClient {
                 trafficSources += row.optString(0) to row.optLong(1, 0L)
             }
         }
-        return YouTubeAnalyticsReport(views, watchMinutes / 60.0, subscribersGained, if (percentageDays > 0) averageViewPercentage / percentageDays else 0.0, dailyViews, trafficSources)
+        return YouTubeAnalyticsReport(
+            views = views,
+            watchHours = watchMinutes / 60.0,
+            subscribersGained = subscribersGained,
+            averageViewPercentage = if (percentageWeight > 0L) weightedViewPercentage / percentageWeight else 0.0,
+            dailyViews = dailyViews,
+            trafficSources = trafficSources
+        )
     }
 
     fun uploadVideo(
