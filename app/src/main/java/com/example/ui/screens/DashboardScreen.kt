@@ -208,7 +208,6 @@ fun DashboardScreen(
                     icon = Icons.Default.CheckCircle,
                     accentColor = Color(0xFF10B981),
                     modifier = Modifier.weight(1f),
-                    trendText = "Ready",
                     testTag = "stat_completed"
                 )
             }
@@ -230,7 +229,6 @@ fun DashboardScreen(
                     icon = Icons.Default.Publish,
                     accentColor = ElectricViolet,
                     modifier = Modifier.weight(1f),
-                    trendText = "Live",
                     testTag = "stat_published"
                 )
             }

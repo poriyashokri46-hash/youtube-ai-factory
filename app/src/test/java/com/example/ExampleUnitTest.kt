@@ -1,5 +1,6 @@
 package com.example
 
+import com.example.data.SampleData
 import com.example.data.VideoProject
 import com.example.localization.AppLanguage
 import com.example.localization.AppStrings
@@ -67,4 +68,19 @@ class ExampleUnitTest {
         assertNotNull(project.selectedAudioUri)
         assertNotNull(project.renderedVideoPath)
     }
+    @Test
+    fun sampleProjectsNeverClaimToBeRenderedOrPublished() {
+        val projects = SampleData.getInitialProjects()
+        assertTrue(projects.isNotEmpty())
+        assertTrue(SampleData.getInitialTasks().isEmpty())
+        projects.forEach { project ->
+            assertEquals("DRAFT", project.status)
+            assertEquals(false, project.isUploaded)
+            assertEquals(null, project.youtubeVideoId)
+            assertEquals(null, project.renderedVideoPath)
+            assertEquals(0L, project.viewsCount)
+            assertEquals(0, project.renderProgress)
+        }
+    }
+
 }

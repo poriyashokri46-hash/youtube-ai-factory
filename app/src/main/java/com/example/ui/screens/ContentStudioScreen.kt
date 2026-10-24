@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.localization.AppLanguage
@@ -65,6 +66,8 @@ fun ContentStudioScreen(
     modifier: Modifier = Modifier
 ) {
     val topic by viewModel.topicInput.collectAsState()
+    val geminiApiKey by viewModel.geminiApiKey.collectAsState()
+    val isGeneratingScript by viewModel.isGeneratingScript.collectAsState()
     val contentLang by viewModel.contentLang.collectAsState()
     val format by viewModel.formatSelection.collectAsState()
     val durationSec by viewModel.durationSec.collectAsState()
@@ -337,9 +340,46 @@ fun ContentStudioScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // Real Gemini API key (kept in memory only, not saved to disk)
+                    Text(
+                        text = if (lang == AppLanguage.PERSIAN) "کلید API جمینای (برای تولید واقعی)" else "Gemini API key (required for real AI)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NeonCyan,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = geminiApiKey,
+                        onValueChange = { viewModel.geminiApiKey.value = it },
+                        modifier = Modifier.fillMaxWidth().testTag("gemini_api_key_input"),
+                        placeholder = { Text("AIza…", color = Color(0xFF64748B)) },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = BorderNavy,
+                            focusedTextColor = TextWhite,
+                            unfocusedTextColor = TextWhite
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (lang == AppLanguage.PERSIAN)
+                            "کلید در حافظه برنامه می‌ماند و ذخیره نمی‌شود؛ با بستن برنامه باید دوباره وارد شود. کلید را در اختیار دیگران نگذارید و سهمیه/هزینه حساب Google خود را بررسی کنید."
+                        else
+                            "The key is memory-only and is not saved; re-enter it after closing the app. Never share it, and check your Google account quota/billing.",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     // AI Generation Action Button
                     Button(
                         onClick = { viewModel.generateAiScript() },
+                        enabled = !isGeneratingScript,
+
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
@@ -355,7 +395,7 @@ fun ContentStudioScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = AppStrings.get("script_generate_btn", lang),
+                            text = if (isGeneratingScript) { if (lang == AppLanguage.PERSIAN) "در حال تولید با Gemini..." else "Generating with Gemini..." } else AppStrings.get("script_generate_btn", lang),
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp

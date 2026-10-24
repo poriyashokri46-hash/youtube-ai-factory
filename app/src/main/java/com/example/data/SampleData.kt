@@ -18,15 +18,15 @@ object SampleData {
             fullScript = "اگر هنوز برای تولید محتوا ساعت‌ها وقت می‌ذارید، این سه ابزار رایگان هوش مصنوعی سال ۲۰۲۵ زندگی کاری شما رو زیر و رو می‌کنه! سلام دوستان! امروز قراره با سرعت برق و باد، سه پلتفرم باورنکردنی معرفی کنم که کارهای یک هفته رو توی ۵ دقیقه براتون انجام می‌دن. ابزار اول: سیستم تولید صدای طبیعی با لحن انسانی. ابزار دوم: موتور ساخت اسلاید و سناریوی خودکار یوتیوب. ابزار سوم: حذف نویز و تدوین هوشمند صدا با یک کلیک. همین الان دکمه سابسکرایب رو بزن و تو کامنت بنویس کدوم ابزار برات جذاب‌تر بود! فردا با آموزش صفر تا صد این ابزارها برمی‌گردم، ویدیو بعدی رو از دست نده!",
             description = "در این ویدیوی کوتاه جذاب‌ترین ابزارهای هوش مصنوعی سال ۲۰۲۵ برای تولید محتوا و افزایش سرعت کار را معرفی می‌کنیم. لایک و سابسکرایب یادتون نره!\n\n#هوش_مصنوعی #یوتیوب #تکنولوژی",
             tags = "هوش مصنوعی, ابزار AI, یوتیوب شورتس, تکنولوژی, تولید محتوا",
-            status = "COMPLETED",
+            status = "DRAFT",
             voiceStyle = "MALE_DEEP",
             speechRate = 1.1f,
             subtitleStyle = "BOLD_YELLOW",
             visualTheme = "CYBERPUNK",
-            renderProgress = 100,
-            renderedVideoPath = "storage/renders/yt_shorts_ai_tools_2025.mp4",
+            renderProgress = 0,
+            renderedVideoPath = null,
             isUploaded = false,
-            viewsCount = 12450,
+            viewsCount = 0,
             createdAt = System.currentTimeMillis() - 86400000L * 2,
             updatedAt = System.currentTimeMillis() - 3600000L * 3
         ),
@@ -46,16 +46,16 @@ object SampleData {
             fullScript = "آیا واقعاً می‌شه بدون داشتن دوربین گران‌قیمت یا نشون دادن چهره، ماهانه هزاران دلار از یوتیوب درآمد داشت؟ جواب بله است! در این ویدیوی آموزشی جامع، گام‌به‌گام استراتژی ساخت کانال‌های فیس‌لس موفق رو با هم بررسی می‌کنیم. بخش اول: انتخاب گوشه بازار سودده. بخش دوم: ساخت سناریو با هوش مصنوعی. بخش سوم: ویدیوهای استوک رایگان. بخش چهارم: سئو تایتل و تامبنیل. اگر از این ویدیو خوشتون اومد حتماً لایک کنید و زنگوله رو فعال کنید.",
             description = "آموزش کامل ساخت کانال یوتیوب بدون چهره با درآمد ارزی. تمام ابزارها و ترفندهای جذب مخاطب در این ویدیو توضیح داده شده است.",
             tags = "کسب درآمد, یوتیوب بدون چهره, فیسلس, درآمد دلاری, استراتژی یوتیوب",
-            status = "PUBLISHED",
+            status = "DRAFT",
             voiceStyle = "ENERGETIC_YOUTH",
             speechRate = 1.0f,
             subtitleStyle = "CYAN_NEON",
             visualTheme = "DARK_STUDIO",
-            renderProgress = 100,
-            renderedVideoPath = "storage/renders/faceless_youtube_blueprint.mp4",
-            youtubeVideoId = "dQw4w9WgXcQ",
-            isUploaded = true,
-            viewsCount = 48920,
+            renderProgress = 0,
+            renderedVideoPath = null,
+            youtubeVideoId = null,
+            isUploaded = false,
+            viewsCount = 0,
             createdAt = System.currentTimeMillis() - 86400000L * 5,
             updatedAt = System.currentTimeMillis() - 86400000L * 1
         ),
@@ -75,12 +75,12 @@ object SampleData {
             fullScript = "۹۰ درصد افراد ویدیوی شما رو به خاطر تامبنیل ضعیف اسکیپ می‌کنن! این راز رنگ‌ها رو ببینید: تامبنیل اولین ویترین ویدیوی شماست. امروز راز ترکیب رنگ‌های پرکنتراست رو می‌گم. قانون یک سوم، استفاده از چهره پرانرژی و نوشتن حداکثر ۳ کلمه بزرگ و خوانا در تصویر. سابسکرایب کن تا قسمت دوم آموزش ساخت تامبنیل رو ببینی!",
             description = "ترفندهای طراحی کاور و تامبنیل ویدیوی یوتیوب با هوش مصنوعی برای افزایش بازدید.",
             tags = "تامبنیل, یوتیوب, طراحی, کلیک بالا, کاور ویدیو",
-            status = "IN_PROGRESS",
+            status = "DRAFT",
             voiceStyle = "FEMALE_CLEAR",
             speechRate = 1.0f,
             subtitleStyle = "MINIMAL_WHITE",
             visualTheme = "MINIMAL_CLEAN",
-            renderProgress = 45,
+            renderProgress = 0,
             renderedVideoPath = null,
             isUploaded = false,
             viewsCount = 0,
@@ -103,13 +103,13 @@ object SampleData {
             fullScript = "Stop spending 8 hours editing a 60-second video! Here are 3 AI hacks you need right now: Welcome back! Today we are looking at revolutionary editing tools transforming YouTube Shorts. Feature 1: Auto-captions with word-by-word highlight. Feature 2: Smart silence cutter. Feature 3: Dynamic zoom and sound FX sync. Hit subscribe and comment which tool you want a full tutorial on! See you in tomorrow's breakdown!",
             description = "Supercharge your YouTube workflow with these cutting edge AI editing techniques.",
             tags = "AI, Video Editing, Shorts, Content Creator, Productivity",
-            status = "REVIEW_PENDING",
+            status = "DRAFT",
             voiceStyle = "ENERGETIC_YOUTH",
             speechRate = 1.05f,
             subtitleStyle = "BOLD_YELLOW",
             visualTheme = "CYBERPUNK",
-            renderProgress = 100,
-            renderedVideoPath = "storage/renders/yt_shorts_editing_tricks.mp4",
+            renderProgress = 0,
+            renderedVideoPath = null,
             isUploaded = false,
             viewsCount = 0,
             createdAt = System.currentTimeMillis() - 86400000L * 1,
@@ -117,36 +117,6 @@ object SampleData {
         )
     )
 
-    fun getInitialTasks(): List<AutomationTask> = listOf(
-        AutomationTask(
-            id = 1,
-            title = "تولید روزانه: ۵ ابزار برنامه‌نویسی با پایتون",
-            format = "SHORTS",
-            language = "fa",
-            scheduledTimeStr = "18:00 (امروز)",
-            status = "COMPLETED",
-            logMessage = "سناریو نگارش شد، صدا تولید گردید و ویدیو با موفقیت رندر شد.",
-            timestamp = System.currentTimeMillis() - 3600000L * 4
-        ),
-        AutomationTask(
-            id = 2,
-            title = "پایش ترندهای تکنولوژی و ساخت پیش‌نویس",
-            format = "SHORTS",
-            language = "fa",
-            scheduledTimeStr = "12:00 (فردا)",
-            status = "QUEUED",
-            logMessage = "در صف پردازش موتور هوش مصنوعی برای زمان‌بندی ظهر.",
-            timestamp = System.currentTimeMillis() - 3600000L * 1
-        ),
-        AutomationTask(
-            id = 3,
-            title = "Daily YouTube Short: Top 3 Crypto Market Moves",
-            format = "SHORTS",
-            language = "en",
-            scheduledTimeStr = "20:00 (Scheduled)",
-            status = "PENDING_APPROVAL",
-            logMessage = "Script and captions generated. Awaiting creator review before final render.",
-            timestamp = System.currentTimeMillis() - 7200000L
-        )
-    )
+    // Automation is not implemented; never provide simulated tasks as if they ran.
+    fun getInitialTasks(): List<AutomationTask> = emptyList()
 }

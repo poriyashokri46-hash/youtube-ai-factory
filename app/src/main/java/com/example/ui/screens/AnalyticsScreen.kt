@@ -24,6 +24,9 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -63,14 +66,12 @@ fun AnalyticsScreen(
 ) {
     val isConnected by viewModel.isYouTubeConnected.collectAsState()
     val channelName by viewModel.channelName.collectAsState()
-
-    // Aggregate metrics from published projects
-    val publishedProjects = projects.filter { it.isUploaded }
-    val baseViews = if (isConnected) 61370L else 0L
-    val totalViews = baseViews + publishedProjects.sumOf { it.viewsCount }
-    val subscribers = if (isConnected) "1,420" else "0"
-    val watchHours = if (isConnected) "840h" else "0h"
-    val avgRetention = if (isConnected) "72.4%" else "--"
+    val analytics by viewModel.youtubeAnalytics.collectAsState()
+    val isLoadingAnalytics by viewModel.isLoadingAnalytics.collectAsState()
+    val views = analytics?.views?.let { String.format("%,d", it) } ?: "--"
+    val subscribers = analytics?.subscribersGained?.let { String.format("%,d", it) } ?: "--"
+    val watchHours = analytics?.watchHours?.let { String.format("%.1f", it) } ?: "--"
+    val avgRetention = analytics?.averageViewPercentage?.let { String.format("%.1f%%", it) } ?: "--"
 
     LazyColumn(
         modifier = modifier
@@ -128,15 +129,39 @@ fun AnalyticsScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = if (isConnected)
-                            "${AppStrings.get("anal_notice_connected", lang)} ($channelName)"
-                        else
-                            AppStrings.get("anal_notice_disconnected", lang),
+                        text = when {
+                            analytics != null && lang == AppLanguage.PERSIAN -> "آمار واقعی کانال «$channelName» برای ۲۸ روز اخیر از YouTube Analytics API دریافت شده است."
+                            analytics != null -> "Live YouTube Analytics data for “$channelName” was fetched for the last 28 days."
+                            isConnected && lang == AppLanguage.PERSIAN -> "حساب متصل است. برای دریافت آمار زنده، دکمهٔ به‌روزرسانی را بزنید."
+                            isConnected -> "YouTube is connected. Tap refresh to fetch live channel analytics."
+                            lang == AppLanguage.PERSIAN -> "برای دریافت آمار زنده، ابتدا حساب یوتیوب را متصل کنید."
+                            else -> "Connect your YouTube account to fetch live analytics."
+                        },
                         color = TextWhite,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Button(
+                onClick = { viewModel.refreshYouTubeAnalytics() },
+                enabled = isConnected && !isLoadingAnalytics,
+                modifier = Modifier.fillMaxWidth().testTag("refresh_analytics_btn"),
+                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+            ) {
+                Text(
+                    text = when {
+                        isLoadingAnalytics && lang == AppLanguage.PERSIAN -> "در حال دریافت آمار..."
+                        isLoadingAnalytics -> "Fetching analytics..."
+                        lang == AppLanguage.PERSIAN -> "به‌روزرسانی آمار زنده"
+                        else -> "Refresh live analytics"
+                    },
+                    color = Color(0xFF001F24),
+                    fontWeight = FontWeight.Bold
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -145,20 +170,20 @@ fun AnalyticsScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard(
                     title = AppStrings.get("anal_metric_views", lang),
-                    value = if (totalViews > 0) String.format("%,d", totalViews) else "0",
+                    value = views,
                     icon = Icons.Default.Visibility,
                     accentColor = NeonCyan,
                     modifier = Modifier.weight(1f),
-                    trendText = if (isConnected) "+24%" else null,
+                    trendText = null,
                     testTag = "metric_views"
                 )
                 StatCard(
-                    title = AppStrings.get("anal_metric_subs", lang),
+                    title = if (lang == AppLanguage.PERSIAN) "عضو جدید (۲۸ روز)" else "Subscribers gained (28d)",
                     value = subscribers,
                     icon = Icons.Default.People,
                     accentColor = ElectricViolet,
                     modifier = Modifier.weight(1f),
-                    trendText = if (isConnected) "+180" else null,
+                    trendText = null,
                     testTag = "metric_subs"
                 )
             }
@@ -180,14 +205,14 @@ fun AnalyticsScreen(
                     icon = Icons.Default.TrendingUp,
                     accentColor = Color(0xFFFF3366),
                     modifier = Modifier.weight(1f),
-                    trendText = "High",
+                    trendText = null,
                     testTag = "metric_retention"
                 )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Weekly Views Trend Chart
+            // Do not draw a fake zero-valued chart; show a truthful unavailable state instead.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = SurfaceNavyCard),
@@ -196,60 +221,42 @@ fun AnalyticsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = if (lang == AppLanguage.PERSIAN) "روند هفتگی بازدیدها (Views Trend)" else "Weekly Views Trend",
+                        text = if (lang == AppLanguage.PERSIAN) "روند بازدیدها" else "Views trend",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = TextWhite
                     )
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Custom Canvas Bar Chart
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                    ) {
-                        val days = listOf("Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri")
-                        val values = if (isConnected) listOf(35f, 52f, 48f, 75f, 92f, 110f, 125f) else listOf(5f, 5f, 5f, 5f, 5f, 5f, 5f)
-                        val maxVal = 130f
-                        val w = size.width
-                        val h = size.height
-                        val barWidth = 26f
-                        val gap = (w - (days.size * barWidth)) / (days.size + 1)
-
-                        // Grid lines
-                        for (i in 1..3) {
-                            val y = h * (i / 4f)
-                            drawLine(
-                                color = Color(0xFF1E283E),
-                                start = Offset(0f, y),
-                                end = Offset(w, y),
-                                strokeWidth = 1f
-                            )
-                        }
-
-                        // Draw Bars
-                        values.forEachIndexed { idx, v ->
-                            val x = gap + idx * (barWidth + gap)
-                            val barH = (v / maxVal) * (h - 20f)
-                            val y = h - barH
-
-                            drawRoundRect(
-                                color = if (idx >= 5) ElectricViolet else NeonCyan,
-                                topLeft = Offset(x, y),
-                                size = Size(barWidth, barH),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f)
-                            )
-                        }
-                    }
-
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        listOf("شنبه", "۱شنبه", "۲شنبه", "۳شنبه", "۴شنبه", "۵شنبه", "جمعه").forEach { d ->
-                            Text(text = d, color = TextMuted, fontSize = 10.sp)
+                    Text(
+                        text = if (analytics == null) {
+                            if (lang == AppLanguage.PERSIAN) "پس از اتصال و دریافت آمار، روند بازدید روزانه در این بخش نمایش داده می‌شود."
+                            else "Daily views will appear here after connecting and fetching analytics."
+                        } else {
+                            if (lang == AppLanguage.PERSIAN) "بازدید روزانه در ۲۸ روز اخیر"
+                            else "Daily views over the last 28 days"
+                        },
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp
+                    )
+                    val recentDays = analytics?.dailyViews.orEmpty().takeLast(7)
+                    if (recentDays.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        val maxDailyViews = recentDays.maxOf { it.second }.coerceAtLeast(1L)
+                        recentDays.forEach { (date, dayViews) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = date.takeLast(5), color = TextMuted, fontSize = 10.sp, modifier = Modifier.width(44.dp))
+                                LinearProgressIndicator(
+                                    progress = { dayViews.toFloat() / maxDailyViews.toFloat() },
+                                    modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
+                                    color = NeonCyan,
+                                    trackColor = Color(0xFF1E283E)
+                                )
+                                Text(text = String.format("%,d", dayViews), color = TextWhite, fontSize = 10.sp, modifier = Modifier.width(58.dp).padding(start = 6.dp))
+                            }
                         }
                     }
                 }
@@ -273,24 +280,42 @@ fun AnalyticsScreen(
                     )
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    val sources = listOf(
-                        Triple(AppStrings.get("anal_traffic_shorts", lang), "68%", NeonCyan),
-                        Triple(AppStrings.get("anal_traffic_search", lang), "21%", ElectricViolet),
-                        Triple(AppStrings.get("anal_traffic_suggested", lang), "11%", Color(0xFF10B981))
-                    )
-
-                    sources.forEach { (label, percent, color) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(8.dp).background(color, androidx.compose.foundation.shape.CircleShape))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = label, color = TextWhite, fontSize = 12.sp)
+                    val sources = analytics?.trafficSources.orEmpty()
+                    if (sources.isEmpty()) {
+                        Text(
+                            text = if (lang == AppLanguage.PERSIAN) "دادهٔ منبع بازدید در دسترس نیست." else "No traffic-source data is available.",
+                            color = TextMuted,
+                            fontSize = 12.sp
+                        )
+                    } else {
+                        val totalSourceViews = sources.sumOf { it.second }.coerceAtLeast(1L)
+                        sources.take(8).forEachIndexed { index, source ->
+                            val label = when (source.first) {
+                                "YT_SEARCH" -> if (lang == AppLanguage.PERSIAN) "جستجوی یوتیوب" else "YouTube Search"
+                                "RELATED_VIDEO" -> if (lang == AppLanguage.PERSIAN) "ویدیوهای مرتبط" else "Related videos"
+                                "BROWSE_FEATURES" -> if (lang == AppLanguage.PERSIAN) "صفحهٔ اصلی و مرور" else "Browse features"
+                                "SHORTS" -> "Shorts"
+                                "EXT_URL" -> if (lang == AppLanguage.PERSIAN) "منابع خارجی" else "External"
+                                "NOTIFICATION" -> if (lang == AppLanguage.PERSIAN) "اعلان‌ها" else "Notifications"
+                                else -> source.first.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
                             }
-                            Text(text = percent, color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            val percent = source.second.toFloat() / totalSourceViews.toFloat()
+                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = label, color = TextWhite, fontSize = 12.sp)
+                                    Text(text = "${(percent * 100).toInt()}% • ${String.format("%,d", source.second)}", color = NeonCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                                LinearProgressIndicator(
+                                    progress = { percent },
+                                    modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
+                                    color = if (index % 2 == 0) NeonCyan else ElectricViolet,
+                                    trackColor = Color(0xFF1E283E)
+                                )
+                            }
                         }
                     }
                 }

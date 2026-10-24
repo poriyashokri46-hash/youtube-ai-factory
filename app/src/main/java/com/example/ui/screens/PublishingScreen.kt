@@ -70,6 +70,7 @@ fun PublishingScreen(
     viewModel: MainViewModel,
     projects: List<VideoProject>,
     lang: AppLanguage,
+    onConnectYouTube: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isConnected by viewModel.isYouTubeConnected.collectAsState()
@@ -109,9 +110,9 @@ fun PublishingScreen(
                 Column {
                     Text(
                         text = if (lang == AppLanguage.PERSIAN)
-                            "کارخانه هوش مصنوعی یوتیوب جهت آپلود ویدیو به دسترسی مجاز یوتیوب (youtube.upload) نیاز دارد.\n\n✓ رمز عبور شما هرگز دریافت نمی‌شود\n✓ ارتباط مستقیم با سرورهای گوگل برقرار است\n✓ مجوزها در هر زمان قابل لغو هستند"
+                            "برای اتصال کانال، گوگل مجوز دسترسی به کانال، آپلود و آمار را درخواست می‌کند. توکن دسترسی فقط در حافظهٔ همین اجرای برنامه نگه‌داری می‌شود؛ با بسته‌شدن برنامه باید دوباره متصل شوید. انتشار عمومی را فقط برای محتوایی انتخاب کنید که آمادهٔ انتشار است."
                         else
-                            "YouTube AI Factory requests authorized access (youtube.upload) to schedule and upload videos to your channel.\n\n✓ Your password is never asked or stored\n✓ Direct Google OAuth 2.0 authentication\n✓ Revocable anytime from your Google Account",
+                            "Google will ask for permission to access your channel, upload videos and read channel statistics. The access token is held in memory only, so reconnect after restarting the app. Choose public visibility only when your video is ready to publish.",
                         color = TextMuted,
                         fontSize = 13.sp,
                         lineHeight = 20.sp
@@ -122,11 +123,11 @@ fun PublishingScreen(
                 Button(
                     onClick = {
                         showOAuthDialog = false
-                        viewModel.connectYouTubeOAuth()
+                        onConnectYouTube()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
                 ) {
-                    Text(text = if (lang == AppLanguage.PERSIAN) "تایید و اتصال کانال" else "Authorize & Connect", color = Color(0xFF001F24), fontWeight = FontWeight.Bold)
+                    Text(text = if (lang == AppLanguage.PERSIAN) "متوجه شدم" else "Got it", color = Color(0xFF001F24), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -428,6 +429,7 @@ fun PublishingScreen(
                         } else {
                             Button(
                                 onClick = { viewModel.startYouTubeUpload() },
+                                enabled = isConnected && !isUploading && activeProject?.renderedVideoPath?.let { java.io.File(it).isFile && java.io.File(it).length() > 0L } == true,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp)
@@ -438,12 +440,22 @@ fun PublishingScreen(
                                 Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = AppStrings.get("pub_upload_btn", lang),
+                                    text = if (lang == AppLanguage.PERSIAN) "انتشار ویدیو در یوتیوب" else "Upload video to YouTube",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (lang == AppLanguage.PERSIAN)
+                                    "برای انتشار باید حساب گوگل متصل باشد و پروژه یک فایل MP4 رندرشده داشته باشد. آپلود از طریق YouTube Data API انجام می‌شود."
+                                else
+                                    "Connect Google and render an MP4 before uploading. The upload uses the YouTube Data API.",
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
                         }
                     }
                 }
@@ -460,7 +472,11 @@ fun PublishingScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                val publishedVideos = projects.filter { it.isUploaded }
+                val publishedVideos = projects.filter { project ->
+                    project.isUploaded &&
+                        project.status.equals("PUBLISHED", ignoreCase = true) &&
+                        !project.youtubeVideoId.isNullOrBlank()
+                }
                 if (publishedVideos.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -488,14 +504,14 @@ fun PublishingScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(text = vid.title, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                    Text(text = "ID: ${vid.youtubeVideoId ?: "yt_published"}", color = NeonCyan, fontSize = 11.sp)
+                                    Text(text = "ID: ${vid.youtubeVideoId}", color = NeonCyan, fontSize = 11.sp)
                                 }
                                 Box(
                                     modifier = Modifier
                                         .background(Color(0xFF10B981).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
-                                    Text(text = "✓ Published", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(text = if (lang == AppLanguage.PERSIAN) "✓ منتشرشده" else "✓ Published", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }

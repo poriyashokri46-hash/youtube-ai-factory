@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -57,6 +62,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -88,6 +95,7 @@ fun VideoProductionScreen(
 ) {
     val selectedId by viewModel.selectedProductionProjectId.collectAsState()
     val isRendering by viewModel.isRendering.collectAsState()
+    val isGeneratingNarration by viewModel.isGeneratingNarration.collectAsState()
     val renderProgress by viewModel.renderProgress.collectAsState()
     val renderStepMessage by viewModel.renderStepMessage.collectAsState()
 
@@ -103,22 +111,52 @@ fun VideoProductionScreen(
     val renderingError by viewModel.renderingError.collectAsState()
 
     var showCanvasSimulator by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     // Multi-Image Picker using Android Photo Picker (zero storage permissions)
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(10)
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
+            // Keep photo-picker grants across app restarts because image URIs are stored in Room.
+            uris.forEach { uri ->
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+            }
             viewModel.onImagesSelected(uris)
         }
     }
 
-    // Audio file picker
+    // OpenDocument grants persistable access, unlike GetContent, so saved projects can reuse audio.
     val audioPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             viewModel.onAudioSelected(uri)
+        }
+    }
+
+    val legacyStoragePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.exportVideoToDevice()
+        } else {
+            Toast.makeText(
+                context,
+                if (lang == AppLanguage.PERSIAN) "برای ذخیره در گالری، مجوز حافظه لازم است." else "Storage permission is required to save to the gallery.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -286,6 +324,26 @@ fun VideoProductionScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF172236))
+                                .padding(10.dp)
+                                .testTag("audio_format_notice")
+                        ) {
+                            Text(
+                                text = if (lang == AppLanguage.PERSIAN)
+                                    "فرمت قابل قبول برای ترکیب مستقیم با MP4: صدای AAC داخل فایل M4A/MP4. فایل‌های MP3 و WAV در نسخهٔ فعلی تبدیل نمی‌شوند و ممکن است رندر با خطا متوقف شود."
+                                else
+                                    "Direct MP4 muxing currently supports AAC audio in M4A/MP4 files. MP3 and WAV are not transcoded and may cause rendering to fail.",
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         // Audio Narration File Selector
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Audiotrack, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(18.dp))
@@ -334,7 +392,7 @@ fun VideoProductionScreen(
                             }
                         } else {
                             Button(
-                                onClick = { audioPickerLauncher.launch("audio/*") },
+                                onClick = { audioPickerLauncher.launch(arrayOf("audio/*")) },
                                 modifier = Modifier.fillMaxWidth().height(42.dp).testTag("pick_audio_btn"),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E283E)),
@@ -364,6 +422,51 @@ fun VideoProductionScreen(
                     border = androidx.compose.foundation.BorderStroke(1.dp, BorderNavy)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        // The narration action uses Android's installed TTS engine and encodes AAC for MP4.
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF2A1A24))
+                                .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+                                .padding(12.dp)
+                                .testTag("tts_info_notice")
+                        ) {
+                            Text(
+                                text = if (lang == AppLanguage.PERSIAN)
+                                    "تولید گفتار با موتور گفتار نصب‌شده روی دستگاه انجام می‌شود. کیفیت و پشتیبانی فارسی/انگلیسی به موتور و داده‌های صوتی دستگاه بستگی دارد؛ خروجی به AAC تبدیل می‌شود."
+                                else
+                                    "Narration uses the speech engine installed on this device. Language support and voice quality depend on installed engine data; generated speech is encoded as AAC.",
+                                color = TextWhite,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = { viewModel.generateNarrationFromScript() },
+                            enabled = !isGeneratingNarration && !isRendering,
+                            modifier = Modifier.fillMaxWidth().height(46.dp).testTag("generate_narration_btn"),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet)
+                        ) {
+                            Icon(Icons.Default.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = when {
+                                    isGeneratingNarration && lang == AppLanguage.PERSIAN -> "در حال تولید صدای گفتاری..."
+                                    isGeneratingNarration -> "Generating narration..."
+                                    lang == AppLanguage.PERSIAN -> "تولید صدای گفتاری از سناریو"
+                                    else -> "Generate narration from script"
+                                },
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
                         // Voice Profile
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Mic, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(18.dp))
@@ -385,7 +488,7 @@ fun VideoProductionScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (isSelected) NeonCyan else Color(0xFF1E283E))
                                         .border(1.dp, if (isSelected) NeonCyan else BorderNavy, RoundedCornerShape(8.dp))
-                                        .clickable { viewModel.prodVoiceStyle.value = v }
+                                        .clickable(enabled = false) { }
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Text(
@@ -412,6 +515,7 @@ fun VideoProductionScreen(
                         Slider(
                             value = speechRate,
                             onValueChange = { viewModel.prodSpeechRate.value = it },
+                            enabled = !isGeneratingNarration && !isRendering,
                             valueRange = 0.8f..1.4f,
                             colors = SliderDefaults.colors(
                                 thumbColor = NeonCyan,
@@ -643,7 +747,15 @@ fun VideoProductionScreen(
 
                 // Save/Export MP4 Video to Device Storage Button
                 Button(
-                    onClick = { viewModel.exportVideoToDevice() },
+                    onClick = {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            legacyStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        } else {
+                            viewModel.exportVideoToDevice()
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)

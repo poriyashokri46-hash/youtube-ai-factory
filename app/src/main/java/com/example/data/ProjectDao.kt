@@ -34,6 +34,9 @@ interface ProjectDao {
     @Query("DELETE FROM video_projects")
     suspend fun deleteAll()
 
+    @Query("UPDATE video_projects SET isUploaded = 0, youtubeVideoId = NULL, status = CASE WHEN status = 'PUBLISHED' THEN 'DRAFT' ELSE status END, viewsCount = 0, renderedVideoPath = CASE WHEN renderedVideoPath LIKE 'storage/renders/%' THEN NULL ELSE renderedVideoPath END, renderedVideoUri = CASE WHEN renderedVideoPath LIKE 'storage/renders/%' THEN NULL ELSE renderedVideoUri END, renderProgress = CASE WHEN renderedVideoPath LIKE 'storage/renders/%' THEN 0 ELSE renderProgress END WHERE isUploaded = 1 OR status = 'PUBLISHED' OR viewsCount > 0 OR renderedVideoPath LIKE 'storage/renders/%'")
+    suspend fun clearLegacyFakePublishState()
+
     @Query("SELECT COUNT(*) FROM video_projects")
     suspend fun getCount(): Int
 }
