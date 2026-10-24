@@ -90,6 +90,7 @@ fun VideoProductionScreen(
 ) {
     val selectedId by viewModel.selectedProductionProjectId.collectAsState()
     val isRendering by viewModel.isRendering.collectAsState()
+    val isGeneratingNarration by viewModel.isGeneratingNarration.collectAsState()
     val renderProgress by viewModel.renderProgress.collectAsState()
     val renderStepMessage by viewModel.renderStepMessage.collectAsState()
 
@@ -402,7 +403,7 @@ fun VideoProductionScreen(
                     border = androidx.compose.foundation.BorderStroke(1.dp, BorderNavy)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        // Be explicit: these controls do not synthesize narration yet.
+                        // The narration action uses Android's installed TTS engine and encodes AAC for MP4.
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -414,12 +415,35 @@ fun VideoProductionScreen(
                         ) {
                             Text(
                                 text = if (lang == AppLanguage.PERSIAN)
-                                    "توجه: تولید صدای گفتاری از متن هنوز پیاده‌سازی نشده است. تنظیمات نوع صدا و سرعت فعلاً روی فایل MP4 اثر ندارند. برای افزودن صدا، فایل صوتی جداگانه انتخاب کنید."
+                                    "تولید گفتار با موتور گفتار نصب‌شده روی دستگاه انجام می‌شود. کیفیت و پشتیبانی فارسی/انگلیسی به موتور و داده‌های صوتی دستگاه بستگی دارد؛ خروجی به AAC تبدیل می‌شود."
                                 else
-                                    "Note: text-to-speech narration is not implemented yet. Voice style and speech-rate settings do not affect the MP4. Select a separate audio file to add sound.",
+                                    "Narration uses the speech engine installed on this device. Language support and voice quality depend on installed engine data; generated speech is encoded as AAC.",
                                 color = TextWhite,
                                 fontSize = 12.sp,
                                 lineHeight = 18.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = { viewModel.generateNarrationFromScript() },
+                            enabled = !isGeneratingNarration && !isRendering,
+                            modifier = Modifier.fillMaxWidth().height(46.dp).testTag("generate_narration_btn"),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ElectricViolet)
+                        ) {
+                            Icon(Icons.Default.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = when {
+                                    isGeneratingNarration && lang == AppLanguage.PERSIAN -> "در حال تولید صدای گفتاری..."
+                                    isGeneratingNarration -> "Generating narration..."
+                                    lang == AppLanguage.PERSIAN -> "تولید صدای گفتاری از سناریو"
+                                    else -> "Generate narration from script"
+                                },
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                         Spacer(modifier = Modifier.height(12.dp))
@@ -471,8 +495,8 @@ fun VideoProductionScreen(
                         }
                         Slider(
                             value = speechRate,
-                            onValueChange = { },
-                            enabled = false,
+                            onValueChange = { viewModel.prodSpeechRate.value = it },
+                            enabled = !isGeneratingNarration && !isRendering,
                             valueRange = 0.8f..1.4f,
                             colors = SliderDefaults.colors(
                                 thumbColor = NeonCyan,
