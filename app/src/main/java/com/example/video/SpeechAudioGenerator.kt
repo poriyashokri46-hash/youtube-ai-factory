@@ -11,7 +11,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.util.Locale
 import java.util.UUID
@@ -33,6 +35,7 @@ class SpeechAudioGenerator(private val context: Context) {
 
         val id = UUID.randomUUID().toString()
         val wavFile = File(context.cacheDir, "narration_$id.wav")
+        val chunkFiles = mutableListOf<File>()
         val m4aFile = File(context.getExternalFilesDir(null) ?: context.filesDir, "narration_$id.m4a")
         val engine = withContext(Dispatchers.Main) { createTts() }
         try {
@@ -48,33 +51,13 @@ class SpeechAudioGenerator(private val context: Context) {
                 )
             }
 
-            val result = CompletableDeferred<Unit>()
-            val utteranceId = "narration_$id"
-            engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) = Unit
-                override fun onDone(doneId: String?) {
-                    if (doneId == utteranceId) result.complete(Unit)
-                }
-                @Deprecated("Deprecated in Java")
-                override fun onError(errorId: String?) {
-                    if (errorId == utteranceId) result.completeExceptionally(
-                        IllegalStateException("The device speech engine failed to synthesize narration.")
-                    )
-                }
-                override fun onError(errorId: String?, errorCode: Int) {
-                    if (errorId == utteranceId) result.completeExceptionally(
-                        IllegalStateException("The device speech engine failed (code $errorCode).")
-                    )
-                }
-            })
-            val status = engine.synthesizeToFile(normalized, android.os.Bundle(), wavFile, utteranceId)
-            if (status != TextToSpeech.SUCCESS) {
-                throw IllegalStateException("The device speech engine rejected the narration request.")
+            val chunks = splitText(normalized, TextToSpeech.getMaxSpeechInputLength())
+            chunks.forEachIndexed { index, chunk ->
+                val chunkFile = File(context.cacheDir, "narration_${id}_${index}.wav")
+                chunkFiles += chunkFile
+                synthesizeChunk(engine, chunk, chunkFile, "narration_${id}_${index}")
             }
-            withTimeout(TimeUnit.MINUTES.toMillis(3)) { result.await() }
-            if (!wavFile.isFile || wavFile.length() < 44) {
-                throw IllegalStateException("The speech engine returned an empty or unsupported audio file.")
-            }
+            mergePcmWavFiles(chunkFiles, wavFile)
             encodeWavAsAac(wavFile, m4aFile)
             if (!m4aFile.isFile || m4aFile.length() <= 0L) {
                 throw IllegalStateException("AAC narration encoding produced no output.")
@@ -85,11 +68,119 @@ class SpeechAudioGenerator(private val context: Context) {
             throw e
         } finally {
             wavFile.delete()
+            chunkFiles.forEach { it.delete() }
             withContext(Dispatchers.Main) {
                 runCatching { engine.stop() }
                 runCatching { engine.shutdown() }
             }
         }
+    }
+
+    private fun splitText(text: String, maxSpeechLength: Int): List<String> {
+        val maxChars = (maxSpeechLength - 100).coerceAtLeast(500)
+        val chunks = mutableListOf<String>()
+        var start = 0
+        while (start < text.length) {
+            var end = minOf(start + maxChars, text.length)
+            if (end < text.length) {
+                val boundary = text.lastIndexOfAny(
+                    charArrayOf('\n', '.', '!', '?', '،', ';', ' '),
+                    end - 1
+                )
+                if (boundary > start + maxChars / 2) end = boundary + 1
+            }
+            val chunk = text.substring(start, end).trim()
+            if (chunk.isNotBlank()) chunks += chunk
+            start = end
+        }
+        return chunks
+    }
+
+    private suspend fun synthesizeChunk(
+        engine: TextToSpeech,
+        text: String,
+        outputFile: File,
+        utteranceId: String
+    ) {
+        val completed = CompletableDeferred<Unit>()
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+            override fun onDone(doneId: String?) {
+                if (doneId == utteranceId) completed.complete(Unit)
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(errorId: String?) {
+                if (errorId == utteranceId) completed.completeExceptionally(
+                    IllegalStateException("The device speech engine failed to synthesize narration.")
+                )
+            }
+            override fun onError(errorId: String?, errorCode: Int) {
+                if (errorId == utteranceId) completed.completeExceptionally(
+                    IllegalStateException("The device speech engine failed (code $errorCode).")
+                )
+            }
+        })
+        val status = engine.synthesizeToFile(text, android.os.Bundle(), outputFile, utteranceId)
+        if (status != TextToSpeech.SUCCESS) {
+            throw IllegalStateException("The device speech engine rejected a narration segment.")
+        }
+        withTimeout(TimeUnit.MINUTES.toMillis(3)) { completed.await() }
+        if (!outputFile.isFile || outputFile.length() < 44L) {
+            throw IllegalStateException("The speech engine returned an empty or unsupported audio segment.")
+        }
+    }
+
+    private fun mergePcmWavFiles(files: List<File>, outputFile: File) {
+        require(files.isNotEmpty()) { "No narration segments were generated." }
+        val merged = ByteArrayOutputStream()
+        var reference: PcmWav? = null
+        for (file in files) {
+            val pcm = readPcmWav(file)
+            val base = reference
+            if (base == null) {
+                reference = pcm.copy(data = ByteArray(0))
+            } else if (
+                base.sampleRate != pcm.sampleRate ||
+                base.channels != pcm.channels ||
+                base.bitsPerSample != pcm.bitsPerSample
+            ) {
+                throw IllegalStateException("The speech engine changed audio format between narration segments.")
+            }
+            require(merged.size().toLong() + pcm.data.size.toLong() <= Int.MAX_VALUE - 44L) {
+                "Generated narration is too large to combine."
+            }
+            merged.write(pcm.data)
+        }
+        val format = reference ?: throw IllegalStateException("No narration audio was generated.")
+        val data = merged.toByteArray()
+        FileOutputStream(outputFile).use { out ->
+            out.write("RIFF".toByteArray(Charsets.US_ASCII))
+            writeLittleEndianInt(out, 36 + data.size)
+            out.write("WAVE".toByteArray(Charsets.US_ASCII))
+            out.write("fmt ".toByteArray(Charsets.US_ASCII))
+            writeLittleEndianInt(out, 16)
+            writeLittleEndianShort(out, 1)
+            writeLittleEndianShort(out, format.channels)
+            writeLittleEndianInt(out, format.sampleRate)
+            writeLittleEndianInt(out, format.sampleRate * format.channels * format.bitsPerSample / 8)
+            writeLittleEndianShort(out, format.channels * format.bitsPerSample / 8)
+            writeLittleEndianShort(out, format.bitsPerSample)
+            out.write("data".toByteArray(Charsets.US_ASCII))
+            writeLittleEndianInt(out, data.size)
+            out.write(data)
+        }
+    }
+
+    private fun writeLittleEndianShort(out: FileOutputStream, value: Int) {
+        out.write(value and 0xff)
+        out.write((value shr 8) and 0xff)
+    }
+
+    private fun writeLittleEndianInt(out: FileOutputStream, value: Int) {
+        out.write(value and 0xff)
+        out.write((value shr 8) and 0xff)
+        out.write((value shr 16) and 0xff)
+        out.write((value shr 24) and 0xff)
     }
 
     private suspend fun createTts(): TextToSpeech {
