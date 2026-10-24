@@ -286,6 +286,26 @@ fun VideoProductionScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF172236))
+                                .padding(10.dp)
+                                .testTag("audio_format_notice")
+                        ) {
+                            Text(
+                                text = if (lang == AppLanguage.PERSIAN)
+                                    "فرمت قابل قبول برای ترکیب مستقیم با MP4: صدای AAC داخل فایل M4A/MP4. فایل‌های MP3 و WAV در نسخهٔ فعلی تبدیل نمی‌شوند و ممکن است رندر با خطا متوقف شود."
+                                else
+                                    "Direct MP4 muxing currently supports AAC audio in M4A/MP4 files. MP3 and WAV are not transcoded and may cause rendering to fail.",
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         // Audio Narration File Selector
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Audiotrack, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(18.dp))
