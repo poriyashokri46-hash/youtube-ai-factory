@@ -315,7 +315,9 @@ class VideoRenderer(private val context: Context) {
                 }
                 outputIndex >= 0 -> {
                     val encodedData = encoder.getOutputBuffer(outputIndex)
-                    if (encodedData != null && bufferInfo.size > 0) {
+                    if (encodedData != null && bufferInfo.size > 0 &&
+                        bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
+                    ) {
                         encodedData.position(bufferInfo.offset)
                         encodedData.limit(bufferInfo.offset + bufferInfo.size)
                         muxer.writeSampleData(0, encodedData, bufferInfo)
