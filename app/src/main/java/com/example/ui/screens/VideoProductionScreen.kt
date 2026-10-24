@@ -1,6 +1,10 @@
 package com.example.ui.screens
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -59,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -138,6 +143,20 @@ fun VideoProductionScreen(
                 )
             }
             viewModel.onAudioSelected(uri)
+        }
+    }
+
+    val legacyStoragePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.exportVideoToDevice()
+        } else {
+            Toast.makeText(
+                context,
+                if (lang == AppLanguage.PERSIAN) "برای ذخیره در گالری، مجوز حافظه لازم است." else "Storage permission is required to save to the gallery.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -728,7 +747,15 @@ fun VideoProductionScreen(
 
                 // Save/Export MP4 Video to Device Storage Button
                 Button(
-                    onClick = { viewModel.exportVideoToDevice() },
+                    onClick = {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+                            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            legacyStoragePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        } else {
+                            viewModel.exportVideoToDevice()
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
