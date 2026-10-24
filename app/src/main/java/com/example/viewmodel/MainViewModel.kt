@@ -539,21 +539,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun exportVideoToDevice() {
-        val file = renderedVideoFile.value
         viewModelScope.launch {
-            if (file != null && file.exists()) {
+            val file = renderedVideoFile.value
+            if (file == null || !file.isFile || file.length() <= 0L) {
                 _snackbarMessage.emit(
                     if (appLanguage.value == AppLanguage.PERSIAN)
-                        "فایل MP4 واقعی در مسیر ذخیره شده است: ${file.absolutePath}"
+                        "ابتدا ویدیو را رندر کنید تا فایل MP4 معتبر ایجاد شود"
                     else
-                        "Real MP4 video file stored at: ${file.absolutePath}"
+                        "Render a video first to create a valid MP4 file"
                 )
-            } else {
+                return@launch
+            }
+
+            if (renderedVideoUri.value?.scheme == "content") {
                 _snackbarMessage.emit(
                     if (appLanguage.value == AppLanguage.PERSIAN)
-                        "ابتدا ویدیو را رندر کنید تا فایل MP4 ایجاد شود"
+                        "ویدیو قبلاً در گالری دستگاه ذخیره شده است."
                     else
-                        "Please render the video first to create the MP4 file"
+                        "The video is already saved in the device gallery."
+                )
+                return@launch
+            }
+
+            try {
+                val projectId = _selectedProductionProjectId.value
+                val project = projectId?.let { projectDao.getProjectById(it) }
+                val exportedUri = com.example.video.VideoRenderer(getApplication())
+                    .exportVideoToGallery(file, project?.title ?: file.nameWithoutExtension)
+                if (exportedUri == null) {
+                    throw IllegalStateException("MediaStore did not accept the exported video.")
+                }
+                renderedVideoUri.value = exportedUri
+                if (project != null) {
+                    projectDao.updateProject(
+                        project.copy(
+                            renderedVideoUri = exportedUri.toString(),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN)
+                        "ویدیو در پوشهٔ Movies/YouTubeAIFactory ذخیره شد."
+                    else
+                        "Video saved to Movies/YouTubeAIFactory."
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Video export failed", e)
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN)
+                        "ذخیره در گالری انجام نشد: ${e.localizedMessage ?: "خطای نامشخص"}"
+                    else
+                        "Gallery export failed: ${e.localizedMessage ?: "unknown error"}"
                 )
             }
         }
