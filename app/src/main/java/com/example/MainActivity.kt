@@ -1,9 +1,13 @@
 package com.example
 
 import android.os.Bundle
+import android.app.Activity
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -21,7 +25,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
 import com.example.localization.AppLanguage
 import com.example.ui.components.AppBottomNavigation
 import com.example.ui.components.TopHeader
@@ -58,6 +66,54 @@ fun MainApp(viewModel: MainViewModel = viewModel()) {
     val tasks by viewModel.tasks.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val authorizationClient = remember(context) { Identity.getAuthorizationClient(context) }
+
+    val authorizationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            runCatching {
+                authorizationClient.getAuthorizationResultFromIntent(result.data!!)
+            }.onSuccess { authorizationResult ->
+                viewModel.completeYouTubeAuthorization(authorizationResult.accessToken.orEmpty())
+            }.onFailure { error ->
+                viewModel.reportYouTubeAuthorizationError(error.localizedMessage ?: "Google authorization failed.")
+            }
+        } else {
+            viewModel.reportYouTubeAuthorizationError("Google authorization was cancelled.")
+        }
+    }
+
+    val startYouTubeAuthorization = {
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(
+                listOf(
+                    Scope("https://www.googleapis.com/auth/youtube.upload"),
+                    Scope("https://www.googleapis.com/auth/youtube.readonly"),
+                    Scope("https://www.googleapis.com/auth/yt-analytics.readonly")
+                )
+            )
+            .build()
+        authorizationClient.authorize(request)
+            .addOnSuccessListener { authorizationResult ->
+                if (authorizationResult.hasResolution()) {
+                    val pendingIntent = authorizationResult.pendingIntent
+                    if (pendingIntent != null) {
+                        authorizationLauncher.launch(
+                            IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                        )
+                    } else {
+                        viewModel.reportYouTubeAuthorizationError("Google requested authorization but did not provide a consent screen.")
+                    }
+                } else {
+                    viewModel.completeYouTubeAuthorization(authorizationResult.accessToken.orEmpty())
+                }
+            }
+            .addOnFailureListener { error ->
+                viewModel.reportYouTubeAuthorizationError(error.localizedMessage ?: "Google authorization is unavailable.")
+            }
+    }
 
     // Listen for snackbar alerts
     LaunchedEffect(Unit) {
@@ -131,7 +187,8 @@ fun MainApp(viewModel: MainViewModel = viewModel()) {
                     AppScreen.PUBLISHING -> PublishingScreen(
                         viewModel = viewModel,
                         projects = projects,
-                        lang = appLanguage
+                        lang = appLanguage,
+                        onConnectYouTube = { startYouTubeAuthorization() }
                     )
                     AppScreen.ANALYTICS -> AnalyticsScreen(
                         viewModel = viewModel,
