@@ -239,6 +239,26 @@ fun AnalyticsScreen(
                         fontSize = 13.sp,
                         lineHeight = 19.sp
                     )
+                    val recentDays = analytics?.dailyViews.orEmpty().takeLast(7)
+                    if (recentDays.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        val maxDailyViews = recentDays.maxOf { it.second }.coerceAtLeast(1L)
+                        recentDays.forEach { (date, dayViews) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = date.takeLast(5), color = TextMuted, fontSize = 10.sp, modifier = Modifier.width(44.dp))
+                                LinearProgressIndicator(
+                                    progress = { dayViews.toFloat() / maxDailyViews.toFloat() },
+                                    modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)),
+                                    color = NeonCyan,
+                                    trackColor = Color(0xFF1E283E)
+                                )
+                                Text(text = String.format("%,d", dayViews), color = TextWhite, fontSize = 10.sp, modifier = Modifier.width(58.dp).padding(start = 6.dp))
+                            }
+                        }
+                    }
                 }
             }
 
