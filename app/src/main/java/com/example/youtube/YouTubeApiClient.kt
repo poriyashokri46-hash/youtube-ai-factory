@@ -102,6 +102,7 @@ class YouTubeApiClient {
     }
 
     fun uploadVideo(
+        accessToken: String,
         project: VideoProject,
         videoFile: File,
         privacyStatus: String,
