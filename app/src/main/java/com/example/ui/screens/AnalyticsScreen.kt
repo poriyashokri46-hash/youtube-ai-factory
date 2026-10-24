@@ -24,6 +24,9 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -63,11 +66,12 @@ fun AnalyticsScreen(
 ) {
     val isConnected by viewModel.isYouTubeConnected.collectAsState()
     val channelName by viewModel.channelName.collectAsState()
-
-    // Do not show locally cached/sample values as live channel analytics.
-    val subscribers = "--"
-    val watchHours = "--"
-    val avgRetention = "--"
+    val analytics by viewModel.youtubeAnalytics.collectAsState()
+    val isLoadingAnalytics by viewModel.isLoadingAnalytics.collectAsState()
+    val views = analytics?.views?.let { String.format("%,d", it) } ?: "--"
+    val subscribers = analytics?.subscribersGained?.let { String.format("%,d", it) } ?: "--"
+    val watchHours = analytics?.watchHours?.let { String.format("%.1f", it) } ?: "--"
+    val avgRetention = analytics?.averageViewPercentage?.let { String.format("%.1f%%", it) } ?: "--"
 
     LazyColumn(
         modifier = modifier
@@ -125,21 +129,39 @@ fun AnalyticsScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = if (isConnected)
-                            if (lang == AppLanguage.PERSIAN)
-                                "وضعیت اتصال ذخیره‌شده است؛ آمار واقعی هنوز از YouTube Analytics API دریافت نمی‌شود."
-                            else
-                                "A saved connection flag is not proof of OAuth; live metrics are not fetched from YouTube Analytics API."
-                        else
-                            if (lang == AppLanguage.PERSIAN)
-                                "آمار زنده در دسترس نیست؛ اتصال واقعی یوتیوب و YouTube Analytics API هنوز پیکربندی نشده‌اند."
-                            else
-                                "Live analytics are unavailable until real YouTube OAuth and YouTube Analytics API are configured.",
+                        text = when {
+                            analytics != null && lang == AppLanguage.PERSIAN -> "آمار واقعی کانال «$channelName» برای ۲۸ روز اخیر از YouTube Analytics API دریافت شده است."
+                            analytics != null -> "Live YouTube Analytics data for “$channelName” was fetched for the last 28 days."
+                            isConnected && lang == AppLanguage.PERSIAN -> "حساب متصل است. برای دریافت آمار زنده، دکمهٔ به‌روزرسانی را بزنید."
+                            isConnected -> "YouTube is connected. Tap refresh to fetch live channel analytics."
+                            lang == AppLanguage.PERSIAN -> "برای دریافت آمار زنده، ابتدا حساب یوتیوب را متصل کنید."
+                            else -> "Connect your YouTube account to fetch live analytics."
+                        },
                         color = TextWhite,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Button(
+                onClick = { viewModel.refreshYouTubeAnalytics() },
+                enabled = isConnected && !isLoadingAnalytics,
+                modifier = Modifier.fillMaxWidth().testTag("refresh_analytics_btn"),
+                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+            ) {
+                Text(
+                    text = when {
+                        isLoadingAnalytics && lang == AppLanguage.PERSIAN -> "در حال دریافت آمار..."
+                        isLoadingAnalytics -> "Fetching analytics..."
+                        lang == AppLanguage.PERSIAN -> "به‌روزرسانی آمار زنده"
+                        else -> "Refresh live analytics"
+                    },
+                    color = Color(0xFF001F24),
+                    fontWeight = FontWeight.Bold
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -148,7 +170,7 @@ fun AnalyticsScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard(
                     title = AppStrings.get("anal_metric_views", lang),
-                    value = "--",
+                    value = views,
                     icon = Icons.Default.Visibility,
                     accentColor = NeonCyan,
                     modifier = Modifier.weight(1f),
@@ -156,7 +178,7 @@ fun AnalyticsScreen(
                     testTag = "metric_views"
                 )
                 StatCard(
-                    title = AppStrings.get("anal_metric_subs", lang),
+                    title = if (lang == AppLanguage.PERSIAN) "عضو جدید (۲۸ روز)" else "Subscribers gained (28d)",
                     value = subscribers,
                     icon = Icons.Default.People,
                     accentColor = ElectricViolet,
@@ -206,10 +228,13 @@ fun AnalyticsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (lang == AppLanguage.PERSIAN)
-                            "هنوز دادهٔ زنده‌ای از YouTube Analytics دریافت نشده است؛ نمودار پس از پیاده‌سازی اتصال رسمی و دریافت داده نمایش داده می‌شود."
-                        else
-                            "No live YouTube Analytics data has been retrieved. A chart will appear after the official API connection is implemented and data is fetched.",
+                        text = if (analytics == null) {
+                            if (lang == AppLanguage.PERSIAN) "پس از اتصال و دریافت آمار، روند بازدید روزانه در این بخش نمایش داده می‌شود."
+                            else "Daily views will appear here after connecting and fetching analytics."
+                        } else {
+                            if (lang == AppLanguage.PERSIAN) "بازدید روزانه در ۲۸ روز اخیر"
+                            else "Daily views over the last 28 days"
+                        },
                         color = TextMuted,
                         fontSize = 13.sp,
                         lineHeight = 19.sp
