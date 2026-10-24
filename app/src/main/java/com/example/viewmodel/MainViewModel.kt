@@ -138,6 +138,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isUploading = MutableStateFlow(false)
     val isUploading: StateFlow<Boolean> = _isUploading.asStateFlow()
+    private var youtubeAccessToken: String? = null
 
     private val _uploadProgress = MutableStateFlow(0)
     val uploadProgress: StateFlow<Int> = _uploadProgress.asStateFlow()
@@ -674,39 +675,148 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         navigateTo(AppScreen.PUBLISHING)
     }
 
-    fun connectYouTubeOAuth(channelTitle: String = "AI Factory Studio", handle: String = "@AIFactoryOfficial") {
-        // Never mark a channel as connected without completing Google's real OAuth flow.
-        preferencesManager.setYouTubeConnected(false)
+    fun connectYouTubeOAuth() {
         viewModelScope.launch {
             _snackbarMessage.emit(
                 if (appLanguage.value == AppLanguage.PERSIAN)
-                    "اتصال واقعی یوتیوب هنوز پیکربندی نشده است؛ هیچ حسابی متصل نشد."
+                    "برای اتصال، مجوز Google را از پنجرهٔ امن انتخاب حساب تأیید کنید."
                 else
-                    "Real YouTube OAuth is not configured yet; no account was connected."
+                    "Approve Google access in the secure account authorization window to connect."
             )
         }
     }
 
+    fun completeYouTubeAuthorization(accessToken: String) {
+        if (accessToken.isBlank()) {
+            viewModelScope.launch {
+                _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "از گوگل توکن دسترسی دریافت نشد." else "Google did not return an access token.")
+            }
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val profile = withContext(Dispatchers.IO) {
+                    com.example.youtube.YouTubeApiClient().getChannelProfile(accessToken)
+                }
+                youtubeAccessToken = accessToken
+                preferencesManager.setYouTubeConnected(true, profile.title, profile.handle)
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN)
+                        "حساب یوتیوب «${profile.title}» با موفقیت متصل شد."
+                    else
+                        "Connected to YouTube channel “${profile.title}”."
+                )
+            } catch (e: Exception) {
+                youtubeAccessToken = null
+                preferencesManager.setYouTubeConnected(false)
+                android.util.Log.e("MainViewModel", "YouTube authorization verification failed", e)
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN)
+                        "تأیید کانال یوتیوب ناموفق بود: ${e.localizedMessage ?: "خطای نامشخص"}"
+                    else
+                        "Could not verify the YouTube channel: ${e.localizedMessage ?: "unknown error"}"
+                )
+            }
+        }
+    }
+
     fun disconnectYouTube() {
+        youtubeAccessToken = null
         preferencesManager.setYouTubeConnected(false)
         viewModelScope.launch {
             _snackbarMessage.emit(
-                if (appLanguage.value == AppLanguage.PERSIAN) "اتصال حساب یوتیوب قطع شد" else "YouTube account disconnected"
+                if (appLanguage.value == AppLanguage.PERSIAN) "اتصال این برنامه به یوتیوب قطع شد." else "YouTube was disconnected from this app."
             )
         }
     }
 
     fun startYouTubeUpload() {
-        // Upload is deliberately blocked until real OAuth + YouTube Data API upload are configured.
-        _isUploading.value = false
+        if (_isUploading.value) return
+        val token = youtubeAccessToken
+        if (token.isNullOrBlank()) {
+            viewModelScope.launch {
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN)
+                        "نشست مجوز یوتیوب فعال نیست؛ دوباره حساب را متصل کنید."
+                    else
+                        "YouTube authorization is not active. Connect your account again."
+                )
+            }
+            return
+        }
+
+        val projectId = _selectedPublishProjectId.value ?: projects.value.firstOrNull()?.id
+        if (projectId == null) {
+            viewModelScope.launch {
+                _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "ابتدا یک پروژه انتخاب کنید." else "Select a project first.")
+            }
+            return
+        }
+
+        _isUploading.value = true
         _uploadProgress.value = 0
-        viewModelScope.launch {
-            _snackbarMessage.emit(
-                if (appLanguage.value == AppLanguage.PERSIAN)
-                    "هیچ ویدیویی آپلود نشد. انتشار واقعی به OAuth گوگل و YouTube Data API نیاز دارد که هنوز پیکربندی نشده‌اند."
-                else
-                    "Nothing was uploaded. Real publishing requires configured Google OAuth and the YouTube Data API."
-            )
+        uploadJob?.cancel()
+        uploadJob = viewModelScope.launch {
+            try {
+                val project = projectDao.getProjectById(projectId)
+                    ?: throw IllegalStateException("The selected project no longer exists.")
+                val file = project.renderedVideoPath?.let { java.io.File(it) }
+                    ?: throw IllegalStateException("Render this project before uploading it.")
+                if (!file.isFile || file.length() <= 0L) {
+                    throw IllegalStateException("The rendered MP4 file is missing. Render the project again.")
+                }
+                val categoryId = when (publishCategory.value.lowercase()) {
+                    "education" -> "27"
+                    "entertainment" -> "24"
+                    "gaming" -> "20"
+                    "howto & style", "how-to & style" -> "26"
+                    "people & blogs", "people and blogs" -> "22"
+                    "science & technology", "science and technology" -> "28"
+                    "music" -> "10"
+                    "film & animation", "film and animation" -> "1"
+                    "news & politics", "news and politics" -> "25"
+                    "sports" -> "17"
+                    else -> "22"
+                }
+                val videoId = withContext(Dispatchers.IO) {
+                    com.example.youtube.YouTubeApiClient().uploadVideo(
+                        accessToken = token,
+                        project = project,
+                        videoFile = file,
+                        privacyStatus = publishVisibility.value,
+                        categoryId = categoryId,
+                        onProgress = { percent -> _uploadProgress.value = percent }
+                    )
+                }
+                projectDao.updateProject(
+                    project.copy(
+                        status = VideoStatus.PUBLISHED.name,
+                        isUploaded = true,
+                        youtubeVideoId = videoId,
+                        viewsCount = 0L,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN)
+                        "ویدیو واقعاً در یوتیوب منتشر شد. شناسه: $videoId"
+                    else
+                        "Video uploaded to YouTube successfully. ID: $videoId"
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "YouTube upload failed", e)
+                val message = e.localizedMessage ?: "Unknown upload error."
+                if (message.contains("HTTP 401")) {
+                    youtubeAccessToken = null
+                    preferencesManager.setYouTubeConnected(false)
+                }
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN) "آپلود یوتیوب ناموفق بود: $message"
+                    else "YouTube upload failed: $message"
+                )
+            } finally {
+                _isUploading.value = false
+            }
         }
     }
 
