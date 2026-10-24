@@ -728,6 +728,7 @@ class VideoRenderer(private val context: Context) {
     }
 
     private fun registerInMediaStore(context: Context, videoFile: File, title: String): Uri? {
+        var insertedUri: Uri? = null
         return try {
             val values = ContentValues().apply {
                 put(MediaStore.Video.Media.TITLE, title)
@@ -747,20 +748,28 @@ class VideoRenderer(private val context: Context) {
             }
 
             val uri = context.contentResolver.insert(collection, values)
-            if (uri != null) {
-                context.contentResolver.openOutputStream(uri)?.use { output ->
-                    videoFile.inputStream().use { input ->
-                        input.copyTo(output)
-                    }
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    values.clear()
-                    values.put(MediaStore.Video.Media.IS_PENDING, 0)
-                    context.contentResolver.update(uri, values, null, null)
-                }
+                ?: throw IllegalStateException("MediaStore could not create an output entry.")
+            insertedUri = uri
+
+            val output = context.contentResolver.openOutputStream(uri, "w")
+                ?: throw IllegalStateException("Could not open the exported video destination.")
+            output.use { stream ->
+                videoFile.inputStream().use { input -> input.copyTo(stream) }
             }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val publishValues = ContentValues().apply {
+                    put(MediaStore.Video.Media.IS_PENDING, 0)
+                }
+                val updated = context.contentResolver.update(uri, publishValues, null, null)
+                if (updated <= 0) throw IllegalStateException("Could not finalize the exported video.")
+            }
+            insertedUri = null
             uri
         } catch (e: Exception) {
+            insertedUri?.let { uri ->
+                runCatching { context.contentResolver.delete(uri, null, null) }
+            }
             Log.e("VideoRenderer", "Failed to register in MediaStore", e)
             null
         }
