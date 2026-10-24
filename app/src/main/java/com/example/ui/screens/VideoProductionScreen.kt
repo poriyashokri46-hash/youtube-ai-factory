@@ -411,7 +411,7 @@ fun VideoProductionScreen(
                                 .background(Color(0xFF2A1A24))
                                 .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.55f), RoundedCornerShape(10.dp))
                                 .padding(12.dp)
-                                .testTag("tts_not_implemented_notice")
+                                .testTag("tts_info_notice")
                         ) {
                             Text(
                                 text = if (lang == AppLanguage.PERSIAN)
