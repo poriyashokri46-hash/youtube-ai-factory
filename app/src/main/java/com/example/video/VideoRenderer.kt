@@ -53,6 +53,10 @@ class VideoRenderer(private val context: Context) {
         audioUri: Uri?,
         onProgress: (percent: Int, message: String) -> Unit
     ): RenderResult = withContext(Dispatchers.IO) {
+        // Validate selected audio before allocating bitmaps or encoding hundreds of frames.
+        // The current muxer copies encoded samples and does not transcode MP3/WAV/PCM.
+        if (audioUri != null) validateAudioForMp4(audioUri)
+
         val isShorts = project.format == "SHORTS"
         val width = if (isShorts) 720 else 1280
         val height = if (isShorts) 1280 else 720
@@ -553,6 +557,38 @@ class VideoRenderer(private val context: Context) {
             }
         }
         return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
+    }
+
+    private fun validateAudioForMp4(audioUri: Uri) {
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(context, audioUri, null)
+            var foundAudioTrack = false
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                if (!mime.startsWith("audio/")) continue
+                foundAudioTrack = true
+                if (mime != "audio/mp4a-latm" && mime != "audio/aac") {
+                    throw IllegalArgumentException(
+                        "Unsupported audio format ($mime). Choose an AAC audio track in an M4A/MP4 file; MP3, WAV and PCM are not converted yet."
+                    )
+                }
+                return
+            }
+            if (!foundAudioTrack) {
+                throw IllegalArgumentException("The selected file does not contain an audio track.")
+            }
+        } catch (e: IllegalArgumentException) {
+            throw e
+        } catch (e: Exception) {
+            throw IllegalArgumentException(
+                "Could not read the selected audio file. Choose a valid M4A/MP4 file containing AAC audio.",
+                e
+            )
+        } finally {
+            try { extractor.release() } catch (_: Exception) { }
+        }
     }
 
     private fun getAudioDurationSeconds(audioUri: Uri): Int? {
