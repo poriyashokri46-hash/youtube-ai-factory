@@ -70,6 +70,7 @@ fun PublishingScreen(
     viewModel: MainViewModel,
     projects: List<VideoProject>,
     lang: AppLanguage,
+    onConnectYouTube: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isConnected by viewModel.isYouTubeConnected.collectAsState()
@@ -109,9 +110,9 @@ fun PublishingScreen(
                 Column {
                     Text(
                         text = if (lang == AppLanguage.PERSIAN)
-                            "این نسخه هنوز ورود واقعی Google OAuth یا مجوز آپلود یوتیوب را پیاده‌سازی نکرده است.\n\nهیچ حسابی در این مرحله متصل نمی‌شود\nهیچ ارتباط OAuth با سرورهای گوگل برقرار نمی‌شود\nانتشار واقعی تا زمان پیکربندی API غیرفعال است"
+                            "برای اتصال کانال، گوگل مجوز دسترسی به کانال، آپلود و آمار را درخواست می‌کند. توکن دسترسی فقط در حافظهٔ همین اجرای برنامه نگه‌داری می‌شود؛ با بسته‌شدن برنامه باید دوباره متصل شوید. انتشار عمومی را فقط برای محتوایی انتخاب کنید که آمادهٔ انتشار است."
                         else
-                            "Real Google OAuth and YouTube upload are not implemented in this build.\n\nNo account is connected by this screen\nNo Google OAuth request is made\nPublishing remains unavailable until the API is configured",
+                            "Google will ask for permission to access your channel, upload videos and read channel statistics. The access token is held in memory only, so reconnect after restarting the app. Choose public visibility only when your video is ready to publish.",
                         color = TextMuted,
                         fontSize = 13.sp,
                         lineHeight = 20.sp
@@ -122,7 +123,7 @@ fun PublishingScreen(
                 Button(
                     onClick = {
                         showOAuthDialog = false
-                        viewModel.connectYouTubeOAuth()
+                        onConnectYouTube()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
                 ) {
@@ -427,8 +428,8 @@ fun PublishingScreen(
                             }
                         } else {
                             Button(
-                                onClick = { },
-                                enabled = false,
+                                onClick = { viewModel.startYouTubeUpload() },
+                                enabled = isConnected && !isUploading && activeProject?.renderedVideoPath?.let { java.io.File(it).isFile && java.io.File(it).length() > 0L } == true,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp)
@@ -439,7 +440,7 @@ fun PublishingScreen(
                                 Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (lang == AppLanguage.PERSIAN) "انتشار واقعی هنوز فعال نیست" else "Real publishing is not available yet",
+                                    text = if (lang == AppLanguage.PERSIAN) "انتشار ویدیو در یوتیوب" else "Upload video to YouTube",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
@@ -448,9 +449,9 @@ fun PublishingScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = if (lang == AppLanguage.PERSIAN)
-                                    "برای جلوگیری از نمایش وضعیت ساختگی، آپلود تا زمان پیاده‌سازی OAuth و YouTube Data API غیرفعال است. تنظیمات بالا فعلاً فقط پیش‌نویس هستند."
+                                    "برای انتشار باید حساب گوگل متصل باشد و پروژه یک فایل MP4 رندرشده داشته باشد. آپلود از طریق YouTube Data API انجام می‌شود."
                                 else
-                                    "Upload is disabled until real OAuth and YouTube Data API support is implemented. The settings above are draft-only.",
+                                    "Connect Google and render an MP4 before uploading. The upload uses the YouTube Data API.",
                                 color = TextMuted,
                                 fontSize = 11.sp,
                                 lineHeight = 16.sp
