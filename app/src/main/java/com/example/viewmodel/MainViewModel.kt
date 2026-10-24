@@ -618,12 +618,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             projectDao.deleteAll()
             automationDao.deleteAll()
             projectDao.insertAll(SampleData.getInitialProjects())
-            automationDao.insertAll(SampleData.getInitialTasks())
             _selectedProductionProjectId.value = null
             _selectedPublishProjectId.value = null
             _editingProjectId.value = null
             _snackbarMessage.emit(
-                if (appLanguage.value == AppLanguage.PERSIAN) "داده‌ها با موفقیت به حالت اولیه بازنشانی شد" else "Sample data restored successfully"
+                if (appLanguage.value == AppLanguage.PERSIAN) "پروژه‌های نمونهٔ پیش‌نویس بازیابی شدند؛ وظایف ساختگی خودکار حذف شدند." else "Sample draft projects restored; simulated automation tasks were removed."
             )
             navigateTo(AppScreen.DASHBOARD)
         }
