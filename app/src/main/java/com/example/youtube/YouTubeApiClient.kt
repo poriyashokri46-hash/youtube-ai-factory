@@ -12,10 +12,14 @@ import okio.BufferedSink
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 data class YouTubeChannelProfile(val title: String, val handle: String)
 data class YouTubeChannelStats(val title: String, val views: Long, val subscribers: Long, val videos: Long)
+data class YouTubeAnalyticsReport(val views: Long, val watchHours: Double, val subscribersGained: Long, val averageViewPercentage: Double, val dailyViews: List<Pair<String, Long>>, val trafficSources: List<Pair<String, Long>>)
 
 class YouTubeApiClient {
     private val http = OkHttpClient.Builder()
@@ -55,8 +59,49 @@ class YouTubeApiClient {
         )
     }
 
+    fun getAnalytics(accessToken: String): YouTubeAnalyticsReport {
+        val end = Calendar.getInstance()
+        val start = end.clone() as Calendar
+        start.add(Calendar.DAY_OF_YEAR, -28)
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val startDate = dateFormat.format(start.time)
+        val endDate = dateFormat.format(end.time)
+        val daily = getJson("https://youtubeanalytics.googleapis.com/v2/reports?ids=channel%3D%3DMINE&startDate=$startDate&endDate=$endDate&metrics=views,estimatedMinutesWatched,subscribersGained,averageViewPercentage&dimensions=day&sort=day", accessToken)
+        val rows = daily.optJSONArray("rows")
+        var views = 0L
+        var watchMinutes = 0.0
+        var subscribersGained = 0L
+        var averageViewPercentage = 0.0
+        var percentageDays = 0
+        val dailyViews = mutableListOf<Pair<String, Long>>()
+        if (rows != null) {
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONArray(i) ?: continue
+                if (row.length() < 5) continue
+                val day = row.optString(0)
+                val dayViews = row.optLong(1, 0L)
+                views += dayViews
+                watchMinutes += row.optDouble(2, 0.0)
+                subscribersGained += row.optLong(3, 0L)
+                val percent = row.optDouble(4, Double.NaN)
+                if (!percent.isNaN()) { averageViewPercentage += percent; percentageDays++ }
+                dailyViews += day to dayViews
+            }
+        }
+        val trafficJson = getJson("https://youtubeanalytics.googleapis.com/v2/reports?ids=channel%3D%3DMINE&startDate=$startDate&endDate=$endDate&metrics=views&dimensions=insightTrafficSourceType&sort=-views", accessToken)
+        val trafficRows = trafficJson.optJSONArray("rows")
+        val trafficSources = mutableListOf<Pair<String, Long>>()
+        if (trafficRows != null) {
+            for (i in 0 until trafficRows.length()) {
+                val row = trafficRows.optJSONArray(i) ?: continue
+                if (row.length() < 2) continue
+                trafficSources += row.optString(0) to row.optLong(1, 0L)
+            }
+        }
+        return YouTubeAnalyticsReport(views, watchMinutes / 60.0, subscribersGained, if (percentageDays > 0) averageViewPercentage / percentageDays else 0.0, dailyViews, trafficSources)
+    }
+
     fun uploadVideo(
-        accessToken: String,
         project: VideoProject,
         videoFile: File,
         privacyStatus: String,
