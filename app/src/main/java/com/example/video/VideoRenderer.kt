@@ -552,21 +552,24 @@ class VideoRenderer(private val context: Context) {
 
     private fun getSupportedColorFormat(): Int {
         val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+        var planarSupported = false
         for (info in codecList.codecInfos) {
             if (!info.isEncoder) continue
-            val types = info.supportedTypes
-            for (type in types) {
-                if (type.equals(MediaFormat.MIMETYPE_VIDEO_AVC, ignoreCase = true)) {
-                    val caps = info.getCapabilitiesForType(type)
-                    for (format in caps.colorFormats) {
-                        if (format == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
-                            return format
-                        }
+            for (type in info.supportedTypes) {
+                if (!type.equals(MediaFormat.MIMETYPE_VIDEO_AVC, ignoreCase = true)) continue
+                val caps = runCatching { info.getCapabilitiesForType(type) }.getOrNull() ?: continue
+                for (format in caps.colorFormats) {
+                    if (format == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
+                        return format
+                    }
+                    if (format == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar) {
+                        planarSupported = true
                     }
                 }
             }
         }
-        return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
+        if (planarSupported) return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar
+        throw IllegalStateException("No AVC encoder supporting YUV420 planar or semi-planar input is available on this device.")
     }
 
     private fun validateAudioForMp4(audioUri: Uri) {
