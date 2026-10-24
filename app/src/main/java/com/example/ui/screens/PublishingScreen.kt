@@ -427,7 +427,8 @@ fun PublishingScreen(
                             }
                         } else {
                             Button(
-                                onClick = { viewModel.startYouTubeUpload() },
+                                onClick = { },
+                                enabled = false,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp)
@@ -438,12 +439,22 @@ fun PublishingScreen(
                                 Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = AppStrings.get("pub_upload_btn", lang),
+                                    text = if (lang == AppLanguage.PERSIAN) "انتشار واقعی هنوز فعال نیست" else "Real publishing is not available yet",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (lang == AppLanguage.PERSIAN)
+                                    "برای جلوگیری از نمایش وضعیت ساختگی، آپلود تا زمان پیاده‌سازی OAuth و YouTube Data API غیرفعال است. تنظیمات بالا فعلاً فقط پیش‌نویس هستند.",
+                                else
+                                    "Upload is disabled until real OAuth and YouTube Data API support is implemented. The settings above are draft-only.",
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
                         }
                     }
                 }
