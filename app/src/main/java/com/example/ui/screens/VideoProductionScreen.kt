@@ -427,7 +427,7 @@ fun VideoProductionScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (isSelected) NeonCyan else Color(0xFF1E283E))
                                         .border(1.dp, if (isSelected) NeonCyan else BorderNavy, RoundedCornerShape(8.dp))
-                                        .clickable { viewModel.prodVoiceStyle.value = v }
+                                        .clickable(enabled = false) { }
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Text(
@@ -453,7 +453,8 @@ fun VideoProductionScreen(
                         }
                         Slider(
                             value = speechRate,
-                            onValueChange = { viewModel.prodSpeechRate.value = it },
+                            onValueChange = { },
+                            enabled = false,
                             valueRange = 0.8f..1.4f,
                             colors = SliderDefaults.colors(
                                 thumbColor = NeonCyan,
