@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -57,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -103,21 +105,37 @@ fun VideoProductionScreen(
     val renderingError by viewModel.renderingError.collectAsState()
 
     var showCanvasSimulator by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     // Multi-Image Picker using Android Photo Picker (zero storage permissions)
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(10)
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
+            // Keep photo-picker grants across app restarts because image URIs are stored in Room.
+            uris.forEach { uri ->
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+            }
             viewModel.onImagesSelected(uris)
         }
     }
 
-    // Audio file picker
+    // OpenDocument grants persistable access, unlike GetContent, so saved projects can reuse audio.
     val audioPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             viewModel.onAudioSelected(uri)
         }
     }
@@ -354,7 +372,7 @@ fun VideoProductionScreen(
                             }
                         } else {
                             Button(
-                                onClick = { audioPickerLauncher.launch("audio/*") },
+                                onClick = { audioPickerLauncher.launch(arrayOf("audio/*")) },
                                 modifier = Modifier.fillMaxWidth().height(42.dp).testTag("pick_audio_btn"),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E283E)),
