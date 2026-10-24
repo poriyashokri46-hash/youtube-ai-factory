@@ -143,6 +143,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var renderJob: Job? = null
     private var uploadJob: Job? = null
 
+    init {
+        // Older app versions stored demo upload IDs, views and completed automation tasks as if real.
+        // Clear that legacy state once; automation and YouTube publishing are not implemented.
+        if (!preferencesManager.hasLegacyTruthCleanupRun()) {
+            viewModelScope.launch {
+                try {
+                    projectDao.clearLegacyFakePublishState()
+                    automationDao.deleteAll()
+                    preferencesManager.markLegacyTruthCleanupRun()
+                } catch (e: Exception) {
+                    android.util.Log.e("MainViewModel", "Legacy state cleanup failed; it will retry next launch.", e)
+                }
+            }
+        }
+    }
+
     fun navigateTo(screen: AppScreen) {
         if (_currentScreen.value != screen) {
             _navigationStack.add(_currentScreen.value)
