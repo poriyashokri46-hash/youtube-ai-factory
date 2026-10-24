@@ -183,7 +183,7 @@ fun AnalyticsScreen(
                     icon = Icons.Default.TrendingUp,
                     accentColor = Color(0xFFFF3366),
                     modifier = Modifier.weight(1f),
-                    trendText = "High",
+                    trendText = null,
                     testTag = "metric_retention"
                 )
             }
