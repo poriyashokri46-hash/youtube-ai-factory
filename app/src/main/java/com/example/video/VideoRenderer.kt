@@ -545,41 +545,61 @@ class VideoRenderer(private val context: Context) {
         colorFormat: Int
     ) {
         val frameSize = width * height
-        var yIndex = 0
-        var uvIndex = frameSize
-        var index = 0
-
         val isSemiPlanar = colorFormat == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
 
-        for (j in 0 until height) {
-            for (i in 0 until width) {
-                val c = argb[index++]
-                val r = (c shr 16) and 0xff
-                val g = (c shr 8) and 0xff
-                val b = c and 0xff
+        fun yValue(c: Int): Int {
+            val r = (c shr 16) and 0xff
+            val g = (c shr 8) and 0xff
+            val b = c and 0xff
+            return ((66 * r + 129 * g + 25 * b + 128) shr 8) + 16
+        }
+        fun uValue(c: Int): Int {
+            val r = (c shr 16) and 0xff
+            val g = (c shr 8) and 0xff
+            val b = c and 0xff
+            return ((-38 * r - 74 * g + 112 * b + 128) shr 8) + 128
+        }
+        fun vValue(c: Int): Int {
+            val r = (c shr 16) and 0xff
+            val g = (c shr 8) and 0xff
+            val b = c and 0xff
+            return ((112 * r - 94 * g - 18 * b + 128) shr 8) + 128
+        }
 
-                val y = (66 * r + 129 * g + 25 * b + 128 shr 8) + 16
-                val u = (-38 * r - 74 * g + 112 * b + 128 shr 8) + 128
-                val v = (112 * r - 94 * g - 18 * b + 128 shr 8) + 128
+        // Encode 2x2 blocks: write all four luma samples and average chroma once per block.
+        // This avoids calculating U/V for three pixels whose chroma was previously discarded.
+        for (y in 0 until height step 2) {
+            for (x in 0 until width step 2) {
+                val topLeft = y * width + x
+                val topRight = topLeft + 1
+                val bottomLeft = topLeft + width
+                val bottomRight = bottomLeft + 1
 
-                yuv[yIndex++] = y.coerceIn(0, 255).toByte()
+                yuv[topLeft] = yValue(argb[topLeft]).coerceIn(0, 255).toByte()
+                yuv[topRight] = yValue(argb[topRight]).coerceIn(0, 255).toByte()
+                yuv[bottomLeft] = yValue(argb[bottomLeft]).coerceIn(0, 255).toByte()
+                yuv[bottomRight] = yValue(argb[bottomRight]).coerceIn(0, 255).toByte()
 
-                if (j % 2 == 0 && i % 2 == 0) {
-                    if (isSemiPlanar) {
-                        // NV12 format: U then V interleaved
-                        yuv[uvIndex++] = u.coerceIn(0, 255).toByte()
-                        yuv[uvIndex++] = v.coerceIn(0, 255).toByte()
-                    } else {
-                        // Planar I420
-                        val uOffset = frameSize + (j / 2) * (width / 2) + (i / 2)
-                        val vOffset = frameSize + (frameSize / 4) + (j / 2) * (width / 2) + (i / 2)
-                        if (uOffset < yuv.size) yuv[uOffset] = u.coerceIn(0, 255).toByte()
-                        if (vOffset < yuv.size) yuv[vOffset] = v.coerceIn(0, 255).toByte()
-                    }
+                val u = (uValue(argb[topLeft]) + uValue(argb[topRight]) +
+                    uValue(argb[bottomLeft]) + uValue(argb[bottomRight])) / 4
+                val v = (vValue(argb[topLeft]) + vValue(argb[topRight]) +
+                    vValue(argb[bottomLeft]) + vValue(argb[bottomRight])) / 4
+
+                if (isSemiPlanar) {
+                    val uvOffset = frameSize + (y / 2) * width + x
+                    yuv[uvOffset] = u.coerceIn(0, 255).toByte()
+                    yuv[uvOffset + 1] = v.coerceIn(0, 255).toByte()
+                } else {
+                    val chromaIndex = (y / 2) * (width / 2) + (x / 2)
+                    val uOffset = frameSize + chromaIndex
+                    val vOffset = frameSize + (frameSize / 4) + chromaIndex
+                    yuv[uOffset] = u.coerceIn(0, 255).toByte()
+                    yuv[vOffset] = v.coerceIn(0, 255).toByte()
                 }
             }
         }
     }
+
 
     private fun findSupportedEncoder(): Pair<String, Int> {
         val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
