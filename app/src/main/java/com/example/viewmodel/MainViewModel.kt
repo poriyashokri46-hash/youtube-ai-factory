@@ -310,6 +310,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val existingId = _editingProjectId.value
             val existing = if (existingId != null) projectDao.getProjectById(existingId) else null
+            val contentChanged = existing != null && (
+                existing.title != title ||
+                    existing.topic != topic ||
+                    existing.language != contentLang.value ||
+                    existing.format != formatSelection.value.name ||
+                    existing.targetDurationSec != durationSec.value ||
+                    existing.tone != toneSelection.value.name ||
+                    existing.scriptHook != hookInput.value ||
+                    existing.scriptIntro != introInput.value ||
+                    existing.scriptBody != bodyInput.value ||
+                    existing.scriptCta != ctaInput.value ||
+                    existing.scriptOutro != outroInput.value ||
+                    existing.description != descriptionInput.value ||
+                    existing.tags != tagsInput.value
+                )
 
             val project = VideoProject(
                 id = existingId ?: 0,
@@ -327,14 +342,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 fullScript = fullScript,
                 description = descriptionInput.value,
                 tags = tagsInput.value,
-                status = existing?.status ?: VideoStatus.DRAFT.name,
+                status = if (contentChanged) VideoStatus.DRAFT.name else (existing?.status ?: VideoStatus.DRAFT.name),
                 voiceStyle = existing?.voiceStyle ?: VoiceStyle.MALE_DEEP.name,
                 speechRate = existing?.speechRate ?: 1.0f,
                 subtitleStyle = existing?.subtitleStyle ?: SubtitleStyle.BOLD_YELLOW.name,
                 visualTheme = existing?.visualTheme ?: VisualTheme.CYBERPUNK.name,
-                renderedVideoPath = existing?.renderedVideoPath,
-                renderProgress = existing?.renderProgress ?: 0,
+                selectedImageUris = existing?.selectedImageUris ?: "",
+                selectedAudioUri = existing?.selectedAudioUri,
+                renderedVideoPath = if (contentChanged) null else existing?.renderedVideoPath,
+                renderedVideoUri = if (contentChanged) null else existing?.renderedVideoUri,
+                renderProgress = if (contentChanged) 0 else (existing?.renderProgress ?: 0),
+                renderingError = if (contentChanged) null else existing?.renderingError,
                 youtubeVideoId = existing?.youtubeVideoId,
+                scheduledPublishTime = existing?.scheduledPublishTime,
                 isUploaded = existing?.isUploaded ?: false,
                 viewsCount = existing?.viewsCount ?: 0,
                 createdAt = existing?.createdAt ?: System.currentTimeMillis(),
