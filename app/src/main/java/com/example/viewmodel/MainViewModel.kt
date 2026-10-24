@@ -466,14 +466,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val projectId = _selectedProductionProjectId.value
             val project = projectId?.let { projectDao.getProjectById(it) }
-            val narrationText = listOf(
-                project?.scriptHook ?: hookInput.value,
-                project?.scriptIntro ?: introInput.value,
-                project?.scriptBody ?: bodyInput.value,
-                project?.scriptCta ?: ctaInput.value,
-                project?.scriptOutro ?: outroInput.value
+            // Prefer the latest visible editor values, then fall back to the saved project script.
+            val editorScript = listOf(
+                hookInput.value, introInput.value, bodyInput.value, ctaInput.value, outroInput.value
             ).map { it.trim() }.filter { it.isNotBlank() }.joinToString("\n\n")
-                .ifBlank { project?.fullScript.orEmpty().ifBlank { listOf(hookInput.value, introInput.value, bodyInput.value, ctaInput.value, outroInput.value).filter { it.isNotBlank() }.joinToString("\n\n") } }
+            val savedScript = project?.let {
+                listOf(it.scriptHook, it.scriptIntro, it.scriptBody, it.scriptCta, it.scriptOutro)
+                    .map { section -> section.trim() }.filter { section -> section.isNotBlank() }
+                    .joinToString("\n\n").ifBlank { it.fullScript }
+            }.orEmpty()
+            val narrationText = editorScript.ifBlank { savedScript }
 
             if (narrationText.isBlank()) {
                 _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "ابتدا سناریو را در استودیو تولید یا ذخیره کنید." else "Create or save a script in Content Studio first.")
