@@ -782,7 +782,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "gaming" -> "20"
                     "howto & style", "how-to & style" -> "26"
                     "people & blogs", "people and blogs" -> "22"
-                    "science & technology", "science and technology" -> "28"
+                    "science & technology", "science and technology", "science & tech" -> "28"
                     "music" -> "10"
                     "film & animation", "film and animation" -> "1"
                     "news & politics", "news and politics" -> "25"
