@@ -61,7 +61,7 @@ jobs:
         run: ./gradlew testDebugUnitTest --no-daemon
 
       - name: Build Debug APK
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[final-build]')) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[final-build]'))
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[final-build]'))
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Build Debug AAB (Android App Bundle)
