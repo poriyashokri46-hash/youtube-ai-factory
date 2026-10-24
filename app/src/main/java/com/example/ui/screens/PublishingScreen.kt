@@ -448,7 +448,7 @@ fun PublishingScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = if (lang == AppLanguage.PERSIAN)
-                                    "برای جلوگیری از نمایش وضعیت ساختگی، آپلود تا زمان پیاده‌سازی OAuth و YouTube Data API غیرفعال است. تنظیمات بالا فعلاً فقط پیش‌نویس هستند.",
+                                    "برای جلوگیری از نمایش وضعیت ساختگی، آپلود تا زمان پیاده‌سازی OAuth و YouTube Data API غیرفعال است. تنظیمات بالا فعلاً فقط پیش‌نویس هستند."
                                 else
                                     "Upload is disabled until real OAuth and YouTube Data API support is implemented. The settings above are draft-only.",
                                 color = TextMuted,
@@ -471,7 +471,11 @@ fun PublishingScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                val publishedVideos = projects.filter { it.isUploaded }
+                val publishedVideos = projects.filter { project ->
+                    project.isUploaded &&
+                        project.status.equals("PUBLISHED", ignoreCase = true) &&
+                        !project.youtubeVideoId.isNullOrBlank()
+                }
                 if (publishedVideos.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -499,14 +503,14 @@ fun PublishingScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(text = vid.title, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                    Text(text = "ID: ${vid.youtubeVideoId ?: "yt_published"}", color = NeonCyan, fontSize = 11.sp)
+                                    Text(text = "ID: ${vid.youtubeVideoId}", color = NeonCyan, fontSize = 11.sp)
                                 }
                                 Box(
                                     modifier = Modifier
                                         .background(Color(0xFF10B981).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
-                                    Text(text = "✓ Published", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(text = if (lang == AppLanguage.PERSIAN) "✓ منتشرشده" else "✓ Published", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
