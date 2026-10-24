@@ -475,8 +475,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     .map { section -> section.trim() }.filter { section -> section.isNotBlank() }
                     .joinToString("\n\n").ifBlank { savedProject.fullScript }
             }.orEmpty()
-            val narrationText = editorScript.ifBlank { savedScript }
-            val narrationLanguage = if (editorScript.isNotBlank()) contentLang.value else project?.language ?: contentLang.value
+            val editingSelectedProject = project != null && _editingProjectId.value == project.id
+            val narrationText = if (editingSelectedProject) {
+                editorScript.ifBlank { savedScript }
+            } else {
+                savedScript.ifBlank { editorScript }
+            }
+            val narrationLanguage = if (editingSelectedProject && editorScript.isNotBlank()) {
+                contentLang.value
+            } else {
+                project?.language ?: contentLang.value
+            }
 
             if (narrationText.isBlank()) {
                 _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "ابتدا سناریو را در استودیو تولید یا ذخیره کنید." else "Create or save a script in Content Studio first.")
