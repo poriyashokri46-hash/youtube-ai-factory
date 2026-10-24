@@ -122,6 +122,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val selectedImageUris = MutableStateFlow<List<android.net.Uri>>(emptyList())
     val selectedAudioUri = MutableStateFlow<android.net.Uri?>(null)
     val selectedAudioName = MutableStateFlow<String?>(null)
+    private val _isGeneratingNarration = MutableStateFlow(false)
+    val isGeneratingNarration: StateFlow<Boolean> = _isGeneratingNarration.asStateFlow()
     val renderedVideoFile = MutableStateFlow<java.io.File?>(null)
     val renderedVideoUri = MutableStateFlow<android.net.Uri?>(null)
     val renderingError = MutableStateFlow<String?>(null)
@@ -457,6 +459,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onAudioSelected(uri: android.net.Uri?, name: String? = null) {
         selectedAudioUri.value = uri
         selectedAudioName.value = name ?: uri?.lastPathSegment
+    }
+
+    fun generateNarrationFromScript() {
+        if (_isGeneratingNarration.value || _isRendering.value) return
+        viewModelScope.launch {
+            val projectId = _selectedProductionProjectId.value
+            val project = projectId?.let { projectDao.getProjectById(it) }
+            val narrationText = listOf(
+                project?.scriptHook ?: hookInput.value,
+                project?.scriptIntro ?: introInput.value,
+                project?.scriptBody ?: bodyInput.value,
+                project?.scriptCta ?: ctaInput.value,
+                project?.scriptOutro ?: outroInput.value
+            ).map { it.trim() }.filter { it.isNotBlank() }.joinToString("\n\n")
+                .ifBlank { project?.fullScript.orEmpty().ifBlank { listOf(hookInput.value, introInput.value, bodyInput.value, ctaInput.value, outroInput.value).filter { it.isNotBlank() }.joinToString("\n\n") } }
+
+            if (narrationText.isBlank()) {
+                _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "ابتدا سناریو را در استودیو تولید یا ذخیره کنید." else "Create or save a script in Content Studio first.")
+                return@launch
+            }
+
+            _isGeneratingNarration.value = true
+            try {
+                val output = withContext(Dispatchers.IO) {
+                    com.example.video.SpeechAudioGenerator(getApplication()).generate(
+                        text = narrationText,
+                        languageCode = project?.language ?: contentLang.value,
+                        speechRate = prodSpeechRate.value
+                    )
+                }
+                onAudioSelected(android.net.Uri.fromFile(output), output.name)
+                if (project != null) {
+                    projectDao.updateProject(
+                        project.copy(
+                            selectedAudioUri = android.net.Uri.fromFile(output).toString(),
+                            speechRate = prodSpeechRate.value,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN)
+                        "صدای گفتاری ساخته شد و به پروژه اضافه شد. اکنون می‌توانید ویدیو را رندر کنید."
+                    else
+                        "Narration generated and attached to the project. You can render the video now."
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "TTS narration generation failed", e)
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN)
+                        "تولید صدا ناموفق بود: ${e.localizedMessage ?: "خطای نامشخص"}"
+                    else
+                        "Narration generation failed: ${e.localizedMessage ?: "unknown error"}"
+                )
+            } finally {
+                _isGeneratingNarration.value = false
+            }
+        }
     }
 
     fun startRenderPipeline() {
