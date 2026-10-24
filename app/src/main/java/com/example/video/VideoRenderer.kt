@@ -759,6 +759,14 @@ class VideoRenderer(private val context: Context) {
         }
     }
 
+    suspend fun exportVideoToGallery(videoFile: File, title: String): Uri? =
+        withContext(Dispatchers.IO) {
+            if (!videoFile.isFile || videoFile.length() <= 0L) {
+                throw IllegalArgumentException("The rendered MP4 file is missing or empty.")
+            }
+            registerInMediaStore(context, videoFile, title)
+        }
+
     private fun registerInMediaStore(context: Context, videoFile: File, title: String): Uri? {
         var insertedUri: Uri? = null
         return try {
