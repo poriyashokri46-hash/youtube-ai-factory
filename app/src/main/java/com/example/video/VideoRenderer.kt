@@ -64,10 +64,17 @@ class VideoRenderer(private val context: Context) {
 
         onProgress(5, "آماده‌سازی لایه‌های بصری و سناریو...")
 
-        // 1. Determine actual duration
+        // 1. Respect the project's requested duration. Shorts are capped at 60 seconds;
+        // long-form projects may render longer videos. If audio is selected, trim it to the
+        // requested duration rather than silently forcing every format to 60 seconds.
+        val maxDurationSec = if (isShorts) 60 else 60 * 60
+        val requestedDurationSec = project.targetDurationSec.coerceIn(5, maxDurationSec)
         val audioDurationSec = audioUri?.let { getAudioDurationSeconds(it) }
-        val targetDurationSec = audioDurationSec?.coerceIn(5, 60)
-            ?: (if (imageUris.isNotEmpty()) (imageUris.size * 4).coerceIn(6, 45) else 12)
+        val targetDurationSec = if (audioDurationSec != null) {
+            audioDurationSec.coerceAtLeast(5).coerceAtMost(requestedDurationSec)
+        } else {
+            requestedDurationSec
+        }
         val totalFrames = targetDurationSec * fps
 
         // 2. Decode user images or prepare themed background slides
