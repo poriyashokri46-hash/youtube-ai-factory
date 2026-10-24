@@ -117,10 +117,26 @@ class VideoRenderer(private val context: Context) {
         }
 
         val videoEncoder = MediaCodec.createByCodecName(encoderName)
-        videoEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        videoEncoder.start()
+        try {
+            videoEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            videoEncoder.start()
+        } catch (e: Exception) {
+            runCatching { videoEncoder.stop() }
+            runCatching { videoEncoder.release() }
+            loadedBitmaps.forEach { bitmap -> runCatching { if (!bitmap.isRecycled) bitmap.recycle() } }
+            outputFile.delete()
+            throw IllegalStateException("Could not initialize the device's AVC video encoder: ${e.message}", e)
+        }
 
-        val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        val muxer = try {
+            MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        } catch (e: Exception) {
+            runCatching { videoEncoder.stop() }
+            runCatching { videoEncoder.release() }
+            loadedBitmaps.forEach { bitmap -> runCatching { if (!bitmap.isRecycled) bitmap.recycle() } }
+            outputFile.delete()
+            throw IllegalStateException("Could not create the MP4 muxer: ${e.message}", e)
+        }
         var videoTrackIndex = -1
         var muxerStarted = false
 
