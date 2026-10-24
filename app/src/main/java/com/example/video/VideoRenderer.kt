@@ -78,6 +78,9 @@ class VideoRenderer(private val context: Context) {
                     val original = BitmapFactory.decodeStream(stream)
                     if (original != null) {
                         val scaled = scaleCenterCrop(original, width, height)
+                        // scaleCenterCrop returns a distinct cropped bitmap; release the decoded source
+                        // immediately so projects with many images do not retain duplicate full-size bitmaps.
+                        if (scaled !== original && !original.isRecycled) original.recycle()
                         loadedBitmaps.add(scaled)
                     }
                 }
