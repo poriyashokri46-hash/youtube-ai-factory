@@ -686,6 +686,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun reportYouTubeAuthorizationError(message: String) {
+        viewModelScope.launch {
+            _snackbarMessage.emit(
+                if (appLanguage.value == AppLanguage.PERSIAN)
+                    "اتصال گوگل انجام نشد: $message"
+                else
+                    "Google authorization failed: $message"
+            )
+        }
+    }
+
     fun completeYouTubeAuthorization(accessToken: String) {
         if (accessToken.isBlank()) {
             viewModelScope.launch {
