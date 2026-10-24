@@ -724,10 +724,11 @@ class VideoRenderer(private val context: Context) {
             muxer.start()
             muxerStarted = true
 
-            val videoBufferSize = if (videoFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) videoFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(256 * 1024) else 2 * 1024 * 1024
-            val audioBufferSize = if (audioFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) audioFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(64 * 1024) else 256 * 1024
-            val videoBuffer = ByteBuffer.allocate(videoBufferSize)
-            val audioBuffer = ByteBuffer.allocate(audioBufferSize)
+            val videoBufferSize = if (videoFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) videoFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(4 * 1024 * 1024) else 4 * 1024 * 1024
+            val audioBufferSize = if (audioFormat.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) audioFormat.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceAtLeast(512 * 1024) else 512 * 1024
+            // MediaExtractor is safest with direct buffers; leave headroom for large AVC keyframes.
+            val videoBuffer = ByteBuffer.allocateDirect(videoBufferSize)
+            val audioBuffer = ByteBuffer.allocateDirect(audioBufferSize)
             val info = MediaCodec.BufferInfo()
             var videoDone = false
             var audioDone = false
