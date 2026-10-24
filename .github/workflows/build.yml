@@ -7,6 +7,11 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch: # Allows manual trigger from GitHub web / mobile interface
 
+# Keep only the newest validation run for each branch/PR to avoid wasting CI minutes.
+concurrency:
+  group: android-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Validate code; build APK/AAB only on manual request
