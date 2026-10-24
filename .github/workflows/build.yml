@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build APK and AAB
+    name: Validate code; build APK/AAB only on manual request
     runs-on: ubuntu-latest
 
     steps:
@@ -51,12 +51,15 @@ jobs:
         run: ./gradlew testDebugUnitTest --no-daemon
 
       - name: Build Debug APK
+        if: github.event_name == 'workflow_dispatch'
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Build Debug AAB (Android App Bundle)
+        if: github.event_name == 'workflow_dispatch'
         run: ./gradlew bundleDebug --no-daemon
 
       - name: Upload APK Artifact
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: YouTube-AI-Factory-APK
@@ -64,6 +67,7 @@ jobs:
           retention-days: 30
 
       - name: Upload AAB Artifact
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: YouTube-AI-Factory-AAB
