@@ -43,6 +43,13 @@ class PreferencesManager(context: Context) {
         return prefs.getBoolean("yt_connected", false)
     }
 
+    fun hasLegacyTruthCleanupRun(): Boolean =
+        prefs.getBoolean("legacy_truth_cleanup_v1", false)
+
+    fun markLegacyTruthCleanupRun() {
+        prefs.edit().putBoolean("legacy_truth_cleanup_v1", true).apply()
+    }
+
     fun setLanguage(language: AppLanguage) {
         prefs.edit().putString("app_lang", language.code).apply()
         _appLanguage.value = language
