@@ -7,7 +7,6 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -92,25 +91,21 @@ class SpeechAudioGenerator(private val context: Context) {
     }
 
     private suspend fun createTts(): TextToSpeech {
-        val ready = CompletableDeferred<Pair<TextToSpeech, Int>>()
+        val signal = CompletableDeferred<Int>()
         val engine = TextToSpeech(context.applicationContext) { status ->
-            // The listener may be called asynchronously on the main thread.
-            // The instance is returned below through a holder populated immediately after construction.
+            if (!signal.isCompleted) signal.complete(status)
         }
-        // TTS initialization callback can race construction; use a second initialized instance callback
-        // via a completion signal attached to a stable holder.
-        engine.shutdown()
-        val signal = CompletableDeferred<Pair<TextToSpeech, Int>>()
-        lateinit var tts: TextToSpeech
-        tts = TextToSpeech(context.applicationContext) { status ->
-            if (!signal.isCompleted) signal.complete(tts to status)
+        val status = try {
+            withTimeout(TimeUnit.SECONDS.toMillis(30)) { signal.await() }
+        } catch (e: Exception) {
+            engine.shutdown()
+            throw e
         }
-        val (initialized, status) = withTimeout(TimeUnit.SECONDS.toMillis(30)) { signal.await() }
         if (status != TextToSpeech.SUCCESS) {
-            initialized.shutdown()
+            engine.shutdown()
             throw IllegalStateException("Could not initialize the Android text-to-speech engine.")
         }
-        return initialized
+        return engine
     }
 
     private fun encodeWavAsAac(wavFile: File, outputFile: File) {
