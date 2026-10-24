@@ -139,6 +139,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isUploading = MutableStateFlow(false)
     val isUploading: StateFlow<Boolean> = _isUploading.asStateFlow()
     private var youtubeAccessToken: String? = null
+    private val _youtubeAnalytics = MutableStateFlow<com.example.youtube.YouTubeAnalyticsReport?>(null)
+    val youtubeAnalytics: StateFlow<com.example.youtube.YouTubeAnalyticsReport?> = _youtubeAnalytics.asStateFlow()
+    private val _isLoadingAnalytics = MutableStateFlow(false)
+    val isLoadingAnalytics: StateFlow<Boolean> = _isLoadingAnalytics.asStateFlow()
 
     private val _uploadProgress = MutableStateFlow(0)
     val uploadProgress: StateFlow<Int> = _uploadProgress.asStateFlow()
@@ -827,6 +831,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             } finally {
                 _isUploading.value = false
+            }
+        }
+    }
+
+    fun refreshYouTubeAnalytics() {
+        if (_isLoadingAnalytics.value) return
+        val token = youtubeAccessToken
+        if (token.isNullOrBlank()) {
+            viewModelScope.launch {
+                _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "ابتدا حساب یوتیوب را متصل کنید." else "Connect your YouTube account first.")
+            }
+            return
+        }
+        _isLoadingAnalytics.value = true
+        viewModelScope.launch {
+            try {
+                val report = withContext(Dispatchers.IO) {
+                    com.example.youtube.YouTubeApiClient().getAnalytics(token)
+                }
+                _youtubeAnalytics.value = report
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "YouTube Analytics request failed", e)
+                if ((e.localizedMessage ?: "").contains("HTTP 401")) {
+                    youtubeAccessToken = null
+                    preferencesManager.setYouTubeConnected(false)
+                }
+                _snackbarMessage.emit(
+                    if (appLanguage.value == AppLanguage.PERSIAN)
+                        "دریافت آمار یوتیوب ناموفق بود: ${e.localizedMessage ?: "خطای نامشخص"}"
+                    else
+                        "Could not fetch YouTube Analytics: ${e.localizedMessage ?: "unknown error"}"
+                )
+            } finally {
+                _isLoadingAnalytics.value = false
             }
         }
     }
