@@ -108,7 +108,7 @@ class VideoRenderer(private val context: Context) {
         onProgress(10, "پیکربندی انکودر سخت‌افزاری MediaCodec...")
 
         // 5. Setup MediaCodec & MediaMuxer
-        val colorFormat = getSupportedColorFormat()
+        val (encoderName, colorFormat) = findSupportedEncoder()
         val videoFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat)
             setInteger(MediaFormat.KEY_BIT_RATE, 2_200_000)
@@ -116,7 +116,7 @@ class VideoRenderer(private val context: Context) {
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
         }
 
-        val videoEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        val videoEncoder = MediaCodec.createByCodecName(encoderName)
         videoEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         videoEncoder.start()
 
@@ -581,9 +581,9 @@ class VideoRenderer(private val context: Context) {
         }
     }
 
-    private fun getSupportedColorFormat(): Int {
+    private fun findSupportedEncoder(): Pair<String, Int> {
         val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
-        var planarSupported = false
+        var planarFallback: Pair<String, Int>? = null
         for (info in codecList.codecInfos) {
             if (!info.isEncoder) continue
             for (type in info.supportedTypes) {
@@ -591,16 +591,16 @@ class VideoRenderer(private val context: Context) {
                 val caps = runCatching { info.getCapabilitiesForType(type) }.getOrNull() ?: continue
                 for (format in caps.colorFormats) {
                     if (format == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
-                        return format
+                        return info.name to format
                     }
-                    if (format == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar) {
-                        planarSupported = true
+                    if (format == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar && planarFallback == null) {
+                        planarFallback = info.name to format
                     }
                 }
             }
         }
-        if (planarSupported) return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar
-        throw IllegalStateException("No AVC encoder supporting YUV420 planar or semi-planar input is available on this device.")
+        return planarFallback
+            ?: throw IllegalStateException("No AVC encoder supporting YUV420 planar or semi-planar input is available on this device.")
     }
 
     private fun validateAudioForMp4(audioUri: Uri) {
