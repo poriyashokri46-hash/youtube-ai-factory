@@ -286,6 +286,26 @@ fun VideoProductionScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF172236))
+                                .padding(10.dp)
+                                .testTag("audio_format_notice")
+                        ) {
+                            Text(
+                                text = if (lang == AppLanguage.PERSIAN)
+                                    "فرمت قابل قبول برای ترکیب مستقیم با MP4: صدای AAC داخل فایل M4A/MP4. فایل‌های MP3 و WAV در نسخهٔ فعلی تبدیل نمی‌شوند و ممکن است رندر با خطا متوقف شود."
+                                else
+                                    "Direct MP4 muxing currently supports AAC audio in M4A/MP4 files. MP3 and WAV are not transcoded and may cause rendering to fail.",
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         // Audio Narration File Selector
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Audiotrack, contentDescription = null, tint = ElectricViolet, modifier = Modifier.size(18.dp))
@@ -364,6 +384,28 @@ fun VideoProductionScreen(
                     border = androidx.compose.foundation.BorderStroke(1.dp, BorderNavy)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        // Be explicit: these controls do not synthesize narration yet.
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF2A1A24))
+                                .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+                                .padding(12.dp)
+                                .testTag("tts_not_implemented_notice")
+                        ) {
+                            Text(
+                                text = if (lang == AppLanguage.PERSIAN)
+                                    "توجه: تولید صدای گفتاری از متن هنوز پیاده‌سازی نشده است. تنظیمات نوع صدا و سرعت فعلاً روی فایل MP4 اثر ندارند. برای افزودن صدا، فایل صوتی جداگانه انتخاب کنید."
+                                else
+                                    "Note: text-to-speech narration is not implemented yet. Voice style and speech-rate settings do not affect the MP4. Select a separate audio file to add sound.",
+                                color = TextWhite,
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+
                         // Voice Profile
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Mic, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(18.dp))
@@ -385,7 +427,7 @@ fun VideoProductionScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (isSelected) NeonCyan else Color(0xFF1E283E))
                                         .border(1.dp, if (isSelected) NeonCyan else BorderNavy, RoundedCornerShape(8.dp))
-                                        .clickable { viewModel.prodVoiceStyle.value = v }
+                                        .clickable(enabled = false) { }
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Text(
@@ -411,7 +453,8 @@ fun VideoProductionScreen(
                         }
                         Slider(
                             value = speechRate,
-                            onValueChange = { viewModel.prodSpeechRate.value = it },
+                            onValueChange = { },
+                            enabled = false,
                             valueRange = 0.8f..1.4f,
                             colors = SliderDefaults.colors(
                                 thumbColor = NeonCyan,

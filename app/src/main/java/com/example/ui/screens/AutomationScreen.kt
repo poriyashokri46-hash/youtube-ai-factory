@@ -110,9 +110,9 @@ fun AutomationScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = if (lang == AppLanguage.PERSIAN)
-                            "وضعیت موتور اتوماسیون: وظایف پس‌زمینه برای اجرا در محیط اندروید (WorkManager) سازماندهی شده‌اند. برای خودکارسازی کامل بدون نیاز به باز بودن اپلیکیشن در پس‌زمینه، مستندات استقرار ورکر ابری در بخش تنظیمات در دسترس است."
+                            "زمان‌بندی فعلاً غیرفعال است؛ این صفحه هنوز وظیفهٔ واقعی پس‌زمینه ایجاد نمی‌کند و هیچ ویدئویی را خودکار تولید یا منتشر نمی‌کند."
                         else
-                            "Automation Engine Status: Background tasks are scheduled via Android WorkManager. For 24/7 cloud serverless automation when the device is asleep, review the cloud worker deployment guide in Settings.",
+                            "Scheduling is currently disabled. This screen does not create a real background job or automatically generate or publish videos.",
                         color = TextWhite,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
@@ -145,8 +145,8 @@ fun AutomationScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (automationEnabled) "Active Engine" else "Paused",
-                                color = if (automationEnabled) NeonCyan else Color(0xFFEF4444),
+                                text = if (lang == AppLanguage.PERSIAN) "هنوز پیاده‌سازی نشده" else "Not implemented",
+                                color = Color(0xFFEF4444),
                                 fontSize = 12.sp
                             )
                         }
@@ -154,6 +154,7 @@ fun AutomationScreen(
                         Switch(
                             checked = automationEnabled,
                             onCheckedChange = { viewModel.toggleAutomation(it) },
+                            enabled = false,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color(0xFF001F24),
                                 checkedTrackColor = NeonCyan,
@@ -220,21 +221,25 @@ fun AutomationScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Manual Execution Trigger
+                    // Do not present a non-functional manual trigger as an available action.
                     Button(
-                        onClick = { viewModel.runAutomationTaskNow() },
+                        onClick = {},
+                        enabled = false,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
                             .testTag("run_automation_now_btn"),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                        colors = ButtonDefaults.buttonColors(
+                            disabledContainerColor = Color(0xFF1E283E),
+                            disabledContentColor = TextMuted
+                        )
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF001F24), modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = TextMuted, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = AppStrings.get("auto_run_now", lang),
-                            color = Color(0xFF001F24),
+                            text = if (lang == AppLanguage.PERSIAN) "اجرای خودکار هنوز فعال نیست" else "Automation is not available yet",
+                            color = TextMuted,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )

@@ -64,13 +64,10 @@ fun AnalyticsScreen(
     val isConnected by viewModel.isYouTubeConnected.collectAsState()
     val channelName by viewModel.channelName.collectAsState()
 
-    // Aggregate metrics from published projects
-    val publishedProjects = projects.filter { it.isUploaded }
-    val baseViews = if (isConnected) 61370L else 0L
-    val totalViews = baseViews + publishedProjects.sumOf { it.viewsCount }
-    val subscribers = if (isConnected) "1,420" else "0"
-    val watchHours = if (isConnected) "840h" else "0h"
-    val avgRetention = if (isConnected) "72.4%" else "--"
+    // Do not show locally cached/sample values as live channel analytics.
+    val subscribers = "--"
+    val watchHours = "--"
+    val avgRetention = "--"
 
     LazyColumn(
         modifier = modifier
@@ -129,9 +126,15 @@ fun AnalyticsScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = if (isConnected)
-                            "${AppStrings.get("anal_notice_connected", lang)} ($channelName)"
+                            if (lang == AppLanguage.PERSIAN)
+                                "وضعیت اتصال ذخیره‌شده است؛ آمار واقعی هنوز از YouTube Analytics API دریافت نمی‌شود."
+                            else
+                                "A saved connection flag is not proof of OAuth; live metrics are not fetched from YouTube Analytics API."
                         else
-                            AppStrings.get("anal_notice_disconnected", lang),
+                            if (lang == AppLanguage.PERSIAN)
+                                "آمار زنده در دسترس نیست؛ اتصال واقعی یوتیوب و YouTube Analytics API هنوز پیکربندی نشده‌اند."
+                            else
+                                "Live analytics are unavailable until real YouTube OAuth and YouTube Analytics API are configured.",
                         color = TextWhite,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
@@ -145,11 +148,11 @@ fun AnalyticsScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard(
                     title = AppStrings.get("anal_metric_views", lang),
-                    value = if (totalViews > 0) String.format("%,d", totalViews) else "0",
+                    value = "--",
                     icon = Icons.Default.Visibility,
                     accentColor = NeonCyan,
                     modifier = Modifier.weight(1f),
-                    trendText = if (isConnected) "+24%" else null,
+                    trendText = null,
                     testTag = "metric_views"
                 )
                 StatCard(
@@ -158,7 +161,7 @@ fun AnalyticsScreen(
                     icon = Icons.Default.People,
                     accentColor = ElectricViolet,
                     modifier = Modifier.weight(1f),
-                    trendText = if (isConnected) "+180" else null,
+                    trendText = null,
                     testTag = "metric_subs"
                 )
             }
@@ -187,7 +190,7 @@ fun AnalyticsScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Weekly Views Trend Chart
+            // Do not draw a fake zero-valued chart; show a truthful unavailable state instead.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = SurfaceNavyCard),
@@ -196,62 +199,21 @@ fun AnalyticsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = if (lang == AppLanguage.PERSIAN) "روند هفتگی بازدیدها (Views Trend)" else "Weekly Views Trend",
+                        text = if (lang == AppLanguage.PERSIAN) "روند بازدیدها" else "Views trend",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = TextWhite
                     )
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Custom Canvas Bar Chart
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                    ) {
-                        val days = listOf("Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri")
-                        val values = if (isConnected) listOf(35f, 52f, 48f, 75f, 92f, 110f, 125f) else listOf(5f, 5f, 5f, 5f, 5f, 5f, 5f)
-                        val maxVal = 130f
-                        val w = size.width
-                        val h = size.height
-                        val barWidth = 26f
-                        val gap = (w - (days.size * barWidth)) / (days.size + 1)
-
-                        // Grid lines
-                        for (i in 1..3) {
-                            val y = h * (i / 4f)
-                            drawLine(
-                                color = Color(0xFF1E283E),
-                                start = Offset(0f, y),
-                                end = Offset(w, y),
-                                strokeWidth = 1f
-                            )
-                        }
-
-                        // Draw Bars
-                        values.forEachIndexed { idx, v ->
-                            val x = gap + idx * (barWidth + gap)
-                            val barH = (v / maxVal) * (h - 20f)
-                            val y = h - barH
-
-                            drawRoundRect(
-                                color = if (idx >= 5) ElectricViolet else NeonCyan,
-                                topLeft = Offset(x, y),
-                                size = Size(barWidth, barH),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f)
-                            )
-                        }
-                    }
-
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        listOf("شنبه", "۱شنبه", "۲شنبه", "۳شنبه", "۴شنبه", "۵شنبه", "جمعه").forEach { d ->
-                            Text(text = d, color = TextMuted, fontSize = 10.sp)
-                        }
-                    }
+                    Text(
+                        text = if (lang == AppLanguage.PERSIAN)
+                            "هنوز دادهٔ زنده‌ای از YouTube Analytics دریافت نشده است؛ نمودار پس از پیاده‌سازی اتصال رسمی و دریافت داده نمایش داده می‌شود."
+                        else
+                            "No live YouTube Analytics data has been retrieved. A chart will appear after the official API connection is implemented and data is fetched.",
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp
+                    )
                 }
             }
 
