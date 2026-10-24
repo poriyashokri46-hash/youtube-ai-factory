@@ -470,12 +470,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val editorScript = listOf(
                 hookInput.value, introInput.value, bodyInput.value, ctaInput.value, outroInput.value
             ).map { it.trim() }.filter { it.isNotBlank() }.joinToString("\n\n")
-            val savedScript = project?.let {
-                listOf(it.scriptHook, it.scriptIntro, it.scriptBody, it.scriptCta, it.scriptOutro)
+            val savedScript = project?.let { savedProject ->
+                listOf(savedProject.scriptHook, savedProject.scriptIntro, savedProject.scriptBody, savedProject.scriptCta, savedProject.scriptOutro)
                     .map { section -> section.trim() }.filter { section -> section.isNotBlank() }
-                    .joinToString("\n\n").ifBlank { it.fullScript }
+                    .joinToString("\n\n").ifBlank { savedProject.fullScript }
             }.orEmpty()
             val narrationText = editorScript.ifBlank { savedScript }
+            val narrationLanguage = if (editorScript.isNotBlank()) contentLang.value else project?.language ?: contentLang.value
 
             if (narrationText.isBlank()) {
                 _snackbarMessage.emit(if (appLanguage.value == AppLanguage.PERSIAN) "ابتدا سناریو را در استودیو تولید یا ذخیره کنید." else "Create or save a script in Content Studio first.")
@@ -487,7 +488,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val output = withContext(Dispatchers.IO) {
                     com.example.video.SpeechAudioGenerator(getApplication()).generate(
                         text = narrationText,
-                        languageCode = project?.language ?: contentLang.value,
+                        languageCode = narrationLanguage,
                         speechRate = prodSpeechRate.value
                     )
                 }
